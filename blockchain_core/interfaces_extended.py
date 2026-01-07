@@ -7,7 +7,7 @@ Zgodne z dokumentacją Design Patterns Premium.
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # ============================================================================
 # MODUŁ: BUSINESS LOGIC (Sekcja 3 dokumentacji)
@@ -609,80 +609,3 @@ class EventType(Enum):
     PEER_DISCONNECTED = "peer_disconnected"
     CHAIN_SYNCHRONIZED = "chain_synchronized"
     STATE_UPDATED = "state_updated"
-
-
-class IEventBus(ABC):
-    """
-    System zdarzeń dla komunikacji asynchronicznej między modułami.
-    Wzorzec Publish-Subscribe (Sekcja 7 dokumentacji).
-    """
-
-    @abstractmethod
-    def publish(self, event_type: EventType, payload: Dict[str, Any]) -> None:
-        """
-        Publikuje zdarzenie.
-
-        Args:
-            event_type: Typ zdarzenia
-            payload: Dane zdarzenia
-        """
-        pass
-
-    @abstractmethod
-    def subscribe(self, event_type: EventType, handler: Callable[[Dict[str, Any]], None]) -> str:
-        """
-        Subskrybuje zdarzenie.
-
-        Args:
-            event_type: Typ zdarzenia
-            handler: Funkcja obsługująca zdarzenie
-
-        Returns:
-            ID subskrypcji (do późniejszego unsubscribe)
-        """
-        pass
-
-    @abstractmethod
-    def unsubscribe(self, subscription_id: str) -> bool:
-        """
-        Usuwa subskrypcję.
-
-        Args:
-            subscription_id: ID subskrypcji
-
-        Returns:
-            True jeśli usunięcie się powiodło
-        """
-        pass
-
-
-# ============================================================================
-# Klasy zdarzeń (zgodnie z Tabelą 1 w dokumentacji)
-# ============================================================================
-
-
-class BlockMinedEvent:
-    """Zdarzenie: nowy blok został wykopany"""
-
-    def __init__(self, block: Any):
-        self.event_type = EventType.BLOCK_MINED
-        self.block = block
-        self.hash = block.get_hash()
-        self.timestamp = block.timestamp
-
-
-class BlockReceivedEvent:
-    """Zdarzenie: otrzymano blok z sieci"""
-
-    def __init__(self, block: Any, peer_id: str):
-        self.event_type = EventType.BLOCK_RECEIVED
-        self.block = block
-        self.peer_id = peer_id
-
-
-class TransactionReceivedEvent:
-    """Zdarzenie: otrzymano transakcję"""
-
-    def __init__(self, transaction: Any):
-        self.event_type = EventType.TRANSACTION_RECEIVED
-        self.transaction = transaction

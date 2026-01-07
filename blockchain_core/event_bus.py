@@ -8,10 +8,10 @@ asynchroniczną komunikację między modułami bez ścisłego sprzężenia.
 import uuid
 from typing import Any, Callable, Dict, List
 
-from .interfaces_extended import EventType, IEventBus
+from .interfaces_extended import EventType
 
 
-class EventBus(IEventBus):
+class EventBus:
     """
     Implementacja Event Bus (wzorzec Pub-Sub).
 

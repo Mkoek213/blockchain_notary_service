@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .block_builder import Block, BlockBuilder
 from .crypto_service import ICryptoService
-from .interfaces import IConsensusProvider, INotaryValidator, IStorageProvider
+from .interfaces import INotaryValidator, IStorageProvider
 
 
 class Blockchain:
@@ -24,7 +24,6 @@ class Blockchain:
     def __init__(
         self,
         storage_provider: Optional[IStorageProvider] = None,
-        consensus_provider: Optional[IConsensusProvider] = None,
         notary_validator: Optional[INotaryValidator] = None,
         crypto_service: Optional[ICryptoService] = None,
     ):
@@ -33,7 +32,7 @@ class Blockchain:
 
         Args:
             storage_provider: Provider do przechowywania danych
-            consensus_provider: Provider mechanizmu konsensusu
+            storage_provider: Provider do przechowywania danych
             notary_validator: Validator dokumentów notarialnych
             crypto_service: Serwis kryptograficzny do podpisywania bloków
         """
@@ -42,7 +41,6 @@ class Blockchain:
 
         # Opcjonalne moduły zewnętrzne
         self.storage_provider = storage_provider
-        self.consensus_provider = consensus_provider
         self.notary_validator = notary_validator
         self.crypto_service = crypto_service
 

@@ -7,7 +7,7 @@ from .block_builder import Block, BlockBuilder
 from .blockchain import Blockchain
 from .crypto_service import ICryptoService
 from .event_bus import EventBus
-from .interfaces import IConsensusProvider, INotaryValidator, IStorageProvider
+from .interfaces import INotaryValidator, IStorageProvider
 
 # Rozszerzone interfejsy dla zespołów
 from .interfaces_extended import (
@@ -18,7 +18,6 @@ from .interfaces_extended import (
     ICertificateValidator,
     IConnectionListener,
     IDocumentFactory,
-    IEventBus,
     IIdentityManager,
     IKeyStore,
     ILedgerRepository,

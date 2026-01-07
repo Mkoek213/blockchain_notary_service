@@ -50,46 +50,6 @@ class IStorageProvider(ABC):
         pass
 
 
-class IConsensusProvider(ABC):
-    """
-    Interfejs dla modułu konsensusu (Proof of Work, Proof of Stake, etc.).
-    Implementacja: zespół odpowiedzialny za mechanizm konsensusu.
-    """
-
-    @abstractmethod
-    def validate_proof(
-        self, block_data: Dict[str, Any], proof: int, previous_proof: int, difficulty: int
-    ) -> bool:
-        """
-        Waliduje proof dla nowego bloku.
-
-        Args:
-            block_data: Dane bloku
-            proof: Proof do walidacji
-            previous_proof: Proof poprzedniego bloku
-            difficulty: Poziom trudności
-
-        Returns:
-            True jeśli proof jest poprawny
-        """
-        pass
-
-    @abstractmethod
-    def mine_block(self, block_data: Dict[str, Any], previous_proof: int, difficulty: int) -> int:
-        """
-        Wykonuje mining dla nowego bloku.
-
-        Args:
-            block_data: Dane bloku
-            previous_proof: Proof poprzedniego bloku
-            difficulty: Poziom trudności
-
-        Returns:
-            Znaleziony proof
-        """
-        pass
-
-
 class INotaryValidator(ABC):
     """
     Interfejs dla modułu walidacji dokumentów notarialnych.
