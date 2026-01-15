@@ -243,9 +243,181 @@ class TestBlockchain:
     def test_empty_blockchain_operations(self):
         """Test operacji na pustym blockchainie (tylko genesis)."""
         # Given - tylko genesis
-        empty_blockchain = Blockchain()
+        assert len(self.blockchain) == 1
 
-        # When/Then
-        assert empty_blockchain.get_height() == 1
-        assert empty_blockchain.get_last_block() is not None
-        assert empty_blockchain.validate_chain() is True
+        # When/Then - Sprawdź operacje na pustym łańcuchu
+        assert self.blockchain.get_height() == 1
+        assert self.blockchain.get_last_block().is_genesis_block()
+        assert self.blockchain.validate_chain()
+
+    # ========================================================================
+    # Testy dla nowych metod IBlockchainInterface
+    # ========================================================================
+
+    def test_get_latest_block_hash(self):
+        """Test pobierania hashu ostatniego bloku."""
+        # Given - blockchain z kilkoma blokami
+        for i in range(3):
+            block = (
+                BlockBuilder()
+                .set_parent_hash(self.blockchain.get_last_block().get_hash())
+                .set_author(f"author_{i}")
+                .build(self.crypto_service, self.priv_key)
+            )
+            self.blockchain.append_block(block)
+
+        # When
+        latest_hash = self.blockchain.get_latest_block_hash()
+
+        # Then
+        assert latest_hash == self.blockchain.get_last_block().get_hash()
+        assert isinstance(latest_hash, str)
+        assert len(latest_hash) > 0
+
+    def test_has_block_with_existing_block(self):
+        """Test sprawdzania istnienia bloku - blok istnieje."""
+        # Given - dodaj kilka bloków
+        blocks = []
+        for i in range(3):
+            block = (
+                BlockBuilder()
+                .set_parent_hash(self.blockchain.get_last_block().get_hash())
+                .set_author(f"author_{i}")
+                .build(self.crypto_service, self.priv_key)
+            )
+            self.blockchain.append_block(block)
+            blocks.append(block)
+
+        # When/Then - sprawdź czy bloki istnieją
+        for block in blocks:
+            assert self.blockchain.has_block(block.get_hash()) is True
+
+        # Sprawdź też blok genesis
+        genesis_hash = self.blockchain.chain[0].get_hash()
+        assert self.blockchain.has_block(genesis_hash) is True
+
+    def test_has_block_with_nonexistent_block(self):
+        """Test sprawdzania istnienia bloku - blok nie istnieje."""
+        # Given
+        fake_hash = "nonexistent_hash_12345abcdef"
+
+        # When
+        result = self.blockchain.has_block(fake_hash)
+
+        # Then
+        assert result is False
+
+    def test_handle_transactions_adds_to_pending(self):
+        """Test obsługi transakcji - dodawanie do pending."""
+        # Given
+        tx_data = {
+            "type": "Transaction",
+            "sender": "Alice",
+            "recipient": "Bob",
+            "amount": 100.0,
+        }
+
+        initial_pending_count = len(self.blockchain.pending_data)
+
+        # When
+        self.blockchain.handle_transactions(tx_data)
+
+        # Then
+        assert len(self.blockchain.pending_data) == initial_pending_count + 1
+        assert tx_data in self.blockchain.pending_data
+
+    def test_handle_transactions_multiple(self):
+        """Test obsługi wielu transakcji."""
+        # Given
+        transactions = [
+            {"type": "Transaction", "sender": "Alice", "recipient": "Bob", "amount": 50.0},
+            {"type": "Transaction", "sender": "Bob", "recipient": "Charlie", "amount": 25.0},
+            {"type": "Transaction", "sender": "Charlie", "recipient": "Alice", "amount": 10.0},
+        ]
+
+        # When
+        for tx in transactions:
+            self.blockchain.handle_transactions(tx)
+
+        # Then
+        assert len(self.blockchain.pending_data) >= len(transactions)
+        for tx in transactions:
+            assert tx in self.blockchain.pending_data
+
+    def test_get_blocks_from_start(self):
+        """Test pobierania bloków od początku łańcucha."""
+        # Given - dodaj kilka bloków
+        for i in range(5):
+            block = (
+                BlockBuilder()
+                .set_parent_hash(self.blockchain.get_last_block().get_hash())
+                .set_author(f"author_{i}")
+                .build(self.crypto_service, self.priv_key)
+            )
+            self.blockchain.append_block(block)
+
+        # When - pobierz wszystkie bloki od początku
+        blocks_from_start = self.blockchain.get_blocks_from(0)
+
+        # Then
+        assert len(blocks_from_start) == 6  # genesis + 5 bloków
+        assert blocks_from_start[0].is_genesis_block()
+        assert blocks_from_start == self.blockchain.chain
+
+    def test_get_blocks_from_middle(self):
+        """Test pobierania bloków od środka łańcucha."""
+        # Given - dodaj kilka bloków
+        for i in range(5):
+            block = (
+                BlockBuilder()
+                .set_parent_hash(self.blockchain.get_last_block().get_hash())
+                .set_author(f"author_{i}")
+                .build(self.crypto_service, self.priv_key)
+            )
+            self.blockchain.append_block(block)
+
+        # When - pobierz bloki od wysokości 3
+        blocks_from_middle = self.blockchain.get_blocks_from(3)
+
+        # Then
+        assert len(blocks_from_middle) == 3  # bloki 3, 4, 5
+        assert blocks_from_middle == self.blockchain.chain[3:]
+
+    def test_get_blocks_from_invalid_height(self):
+        """Test pobierania bloków z nieprawidłowej wysokości."""
+        # Given - blockchain z kilkoma blokami
+        for i in range(3):
+            block = (
+                BlockBuilder()
+                .set_parent_hash(self.blockchain.get_last_block().get_hash())
+                .set_author(f"author_{i}")
+                .build(self.crypto_service, self.priv_key)
+            )
+            self.blockchain.append_block(block)
+
+        # When/Then - ujemna wysokość
+        assert self.blockchain.get_blocks_from(-1) == []
+
+        # When/Then - wysokość poza zakresem
+        assert self.blockchain.get_blocks_from(100) == []
+
+    def test_get_blocks_from_last_block(self):
+        """Test pobierania bloków od ostatniego bloku."""
+        # Given - dodaj kilka bloków
+        for i in range(5):
+            block = (
+                BlockBuilder()
+                .set_parent_hash(self.blockchain.get_last_block().get_hash())
+                .set_author(f"author_{i}")
+                .build(self.crypto_service, self.priv_key)
+            )
+            self.blockchain.append_block(block)
+
+        last_height = self.blockchain.get_height() - 1
+
+        # When
+        blocks_from_last = self.blockchain.get_blocks_from(last_height)
+
+        # Then
+        assert len(blocks_from_last) == 1
+        assert blocks_from_last[0] == self.blockchain.get_last_block()

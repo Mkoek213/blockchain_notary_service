@@ -9,7 +9,6 @@ BLOCKCHAIN CORE (już zaimplementowany) dostarcza:
     ✓ Block, BlockBuilder - tworzenie i zarządzanie blokami
     ✓ Blockchain - zarządzanie łańcuchem bloków
     ✓ NotarialDocument (Transaction, VotingResult) - typy dokumentów
-    ✓ EventBus - komunikacja między modułami
     ✓ Interfejsy: IDocumentFactory, INetworkModule, IBusinessLogicModule,
                   IBlockchainInterface, IWorldStateManager, etc.
 
@@ -20,6 +19,7 @@ ZESPOŁY IMPLEMENTUJĄ (przykłady poniżej):
     □ Moduł 5: Storage - World State, persystencja
 
 UWAGA: To są PRZYKŁADY implementacji pokazujące jak używać Blockchain Core!
+NOTA: EventBus został usunięty - komunikacja między modułami odbywa się przez callbacks.
 """
 
 from typing import Any, Dict
@@ -28,8 +28,6 @@ from typing import Any, Dict
 from blockchain_core import (
     BlockBuilder,
     Blockchain,
-    EventBus,
-    EventType,
     IBlockchainInterface,
     IBusinessLogicModule,
     IDocumentFactory,
@@ -224,19 +222,16 @@ class SimpleNetworkManager(INetworkModule):
     Zespół Network implementuje pełną komunikację P2P.
     """
 
-    def __init__(self, blockchain: IBlockchainInterface, event_bus: EventBus):
+    def __init__(self, blockchain: IBlockchainInterface, block_callback=None):
         """
         Args:
             blockchain: Interfejs do blockchain core
-            event_bus: System zdarzeń
+            block_callback: Optional callback wywoływany po wykopieniu bloku
         """
         self.blockchain = blockchain
-        self.event_bus = event_bus
+        self.block_callback = block_callback
         self.peers: Dict[str, Any] = {}  # peer_id -> connection
         self.is_running = False
-
-        # Subskrybuj zdarzenia blockchain
-        self.event_bus.subscribe(EventType.BLOCK_MINED, self._on_block_mined)
 
     def start(self, port: int = 8545) -> None:
         """Uruchamia moduł sieciowy."""
@@ -297,9 +292,8 @@ class SimpleNetworkManager(INetworkModule):
         """Zwraca liczbę połączeń."""
         return len(self.peers)
 
-    def _on_block_mined(self, payload: Dict[str, Any]):
+    def on_block_mined(self, block):
         """Callback gdy wykopano nowy blok."""
-        block = payload["block"]
         # Automatycznie rozgłoś
         self.broadcast_block(block)
 
@@ -365,13 +359,12 @@ def demo_teams_integration():
     print("MODUŁ 2: Business Logic - Walidacja + Integracja")
     print("=" * 70)
     print("Zespół implementuje: IBusinessLogicModule")
-    print("Używa z Blockchain Core: Blockchain, BlockBuilder, EventBus")
+    print("Używa z Blockchain Core: Blockchain, BlockBuilder")
     print("-" * 70)
 
     # Inicjalizacja komponentów Blockchain Core
     blockchain = Blockchain()
     crypto_service = MockCryptoService()
-    event_bus = EventBus()
     pub_key, priv_key = crypto_service.generate_key_pair()
 
     # Mock World State (zespół Storage to zaimplementuje później)
@@ -414,18 +407,20 @@ def demo_teams_integration():
     print("MODUŁ 3: Network - Komunikacja P2P")
     print("=" * 70)
     print("Zespół implementuje: INetworkModule")
-    print("Używa z Blockchain Core: IBlockchainInterface, EventBus, Block")
+    print("Używa z Blockchain Core: IBlockchainInterface, Block")
     print("-" * 70)
 
-    network = SimpleNetworkManager(blockchain, event_bus)
+    network = SimpleNetworkManager(
+        blockchain, block_callback=lambda b: print(f"Callback: blok {b.get_hash()[:8]}...")
+    )
 
     network.start(port=8545)
     print("✓ Moduł sieciowy uruchomiony na porcie 8545")
     print(f"✓ Połączonych peerów: {network.get_peer_count()}")
 
-    # Symulacja rozgłaszania bloku przez EventBus
+    # Symulacja rozgłaszania bloku przez callback
     print("\n✓ Rozgłaszanie nowo utworzonego bloku...")
-    network.broadcast_block(block)
+    network.on_block_mined(block)
 
     # Symulacja synchronizacji
     print("✓ Synchronizacja łańcucha z siecią...")
@@ -445,7 +440,6 @@ def demo_teams_integration():
     print("  ✓ Block, BlockBuilder - tworzenie bloków")
     print("  ✓ Blockchain - zarządzanie łańcuchem")
     print("  ✓ NotarialDocument, Transaction, VotingResult - typy dokumentów")
-    print("  ✓ EventBus - komunikacja między modułami (Pub-Sub)")
     print("  ✓ Interfejsy - kontrakty dla zespołów")
     print()
     print("ZESPOŁY IMPLEMENTUJĄ (używając interfejsów):")
@@ -462,7 +456,7 @@ def demo_teams_integration():
     print("      - IWorldStateManager - World State pattern")
     print("      - IStorageProvider - persystencja danych")
     print()
-    print("KOMUNIKACJA: EventBus umożliwia luźne sprzężenie między modułami")
+    print("KOMUNIKACJA: Callbacki/bezpośrednie wywołania między modułami")
     print("=" * 70)
 
 

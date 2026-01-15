@@ -286,6 +286,54 @@ class IBlockchainInterface(ABC):
         """Waliduje i dodaje blok z sieci."""
         pass
 
+    # Dodatkowe metody zgodnie z wymaganiami z dokumentacji
+    @abstractmethod
+    def get_latest_block_hash(self) -> str:
+        """
+        Zwraca hash ostatniego bloku w łańcuchu.
+
+        Returns:
+            Hash ostatniego bloku
+        """
+        pass
+
+    @abstractmethod
+    def has_block(self, hash: str) -> bool:
+        """
+        Sprawdza czy blok o podanym hashu istnieje w łańcuchu.
+
+        Args:
+            hash: Hash bloku do sprawdzenia
+
+        Returns:
+            True jeśli blok istnieje, False w przeciwnym razie
+        """
+        pass
+
+    @abstractmethod
+    def handle_transactions(self, tx_data: dict) -> None:
+        """
+        Obsługuje przychodzącą transakcję z sieci.
+        Dodaje do puli oczekujących transakcji.
+
+        Args:
+            tx_data: Dane transakcji do przetworzenia
+        """
+        pass
+
+    @abstractmethod
+    def get_blocks_from(self, height: int) -> List[Any]:
+        """
+        Zwraca wszystkie bloki od podanej wysokości do końca łańcucha.
+
+        Args:
+            height: Początkowa wysokość (inclusive)
+
+        Returns:
+            Lista bloków od height do końca łańcucha
+        """
+        pass
+
 
 # ============================================================================
 # MODUŁ: IDENTITY & SECURITY (Sekcja 5 dokumentacji)

@@ -6,7 +6,6 @@ Moduł główny implementujący podstawową funkcjonalność blockchain dla serw
 from .block_builder import Block, BlockBuilder
 from .blockchain import Blockchain
 from .crypto_service import ICryptoService
-from .event_bus import EventBus
 from .interfaces import INotaryValidator, IStorageProvider
 
 # Rozszerzone interfejsy dla zespołów
@@ -42,9 +41,7 @@ __all__ = [
     "IConsensusProvider",
     "INotaryValidator",
     "ICryptoService",
-    # System zdarzeń
-    "EventBus",
-    "IEventBus",
+    # System zdarzeń (EventType from interfaces_extended)
     "EventType",
     # Interfejsy dla Business Logic
     "IBusinessLogicModule",

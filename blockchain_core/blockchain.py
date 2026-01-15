@@ -238,3 +238,63 @@ class Blockchain:
             "latest_block_hash": self.get_latest_block().get_hash(),
             "is_valid": self.validate_chain(),
         }
+
+    # ========================================================================
+    # Dodatkowe metody IBlockchainInterface - zgodnie z wymaganiami
+    # ========================================================================
+
+    def get_latest_block_hash(self) -> str:
+        """
+        Zwraca hash ostatniego bloku w łańcuchu.
+        Potrzebne dla modułu Network.
+
+        Returns:
+            Hash ostatniego bloku
+        """
+        return self.get_latest_block().get_hash()
+
+    def has_block(self, hash: str) -> bool:
+        """
+        Sprawdza czy blok o podanym hashu istnieje w łańcuchu.
+        Potrzebne dla modułu Network do weryfikacji bloków.
+
+        Args:
+            hash: Hash bloku do sprawdzenia
+
+        Returns:
+            True jeśli blok istnieje, False w przeciwnym razie
+        """
+        return self.get_block_by_hash(hash) is not None
+
+    def handle_transactions(self, tx_data: dict) -> None:
+        """
+        Obsługuje przychodzącą transakcję z sieci.
+        Dodaje do puli oczekujących transakcji (pending_data).
+        Potrzebne dla modułu Network.
+
+        Args:
+            tx_data: Dane transakcji do przetworzenia
+        """
+        # Walidacja transakcji jeśli dostępny validator
+        if self.notary_validator:
+            if not self.notary_validator.validate_document(tx_data):
+                return
+
+        # Dodaj do puli oczekujących
+        self.pending_data.append(tx_data)
+
+    def get_blocks_from(self, height: int) -> List[Block]:
+        """
+        Zwraca wszystkie bloki od podanej wysokości do końca łańcucha.
+        Potrzebne dla modułu Network do synchronizacji.
+
+        Args:
+            height: Początkowa wysokość (inclusive)
+
+        Returns:
+            Lista bloków od height do końca łańcucha
+        """
+        if height < 0 or height >= len(self.chain):
+            return []
+
+        return self.chain[height:]
