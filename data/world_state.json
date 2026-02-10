@@ -1,0 +1,36 @@
+{
+  "balances": {
+    "ac1": 5000.0,
+    "ac2": 5000.0
+  },
+  "companies": {
+    "sp1": {
+      "id": "sp1",
+      "name": "sp1"
+    }
+  },
+  "processed_documents": [
+    "182eef352929f07ea2d827afb6c9f75cffb1947699b94d5a505140d10ad190ff",
+    "3bfa4340b60c53406bc1d0c5fdf7afa900f34ffc4ea49eee0709413f9594bcbe",
+    "4201dec349146a336fd347ce5865156c66c6d61a53a2bbc2387d6d11293ce074",
+    "46ea26256a9d8f17d64d0a9d08718bed6bd899285e455be81793688754997f20",
+    "6c61224c9d763904f49d155d6baf5d2bafb9e2901118a355bf8cdf13df616232",
+    "7a96f6f337f3714a3733a213d065cb318632a407b5cc797db8a9bc04674dc6dd",
+    "8390dc7cfe75b2d99400b36e1e71aec9b31805eeb0ec33c41cac3a6ac95f9af8",
+    "a167dc37d9fe7bb4d7c528b29cb352ec2bbcf648afbafa0aea3aa69632d55099",
+    "fcb35c680fd86f09e17b8c20b2fff4c127f10c2bf99d015eac03c485ac79b20b",
+    "fe447e74d758a08c5cbe36488c4c5fc01518a4a8e3e4ca306ed492d19c18a1ad"
+  ],
+  "shares": [
+    {
+      "account_id": "ac1",
+      "company_id": "sp1",
+      "shares": 200
+    },
+    {
+      "account_id": "ac2",
+      "company_id": "sp1",
+      "shares": 0
+    }
+  ]
+}

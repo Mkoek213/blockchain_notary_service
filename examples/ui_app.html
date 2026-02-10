@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notary Service UI</title>
+  <style>
+    :root {
+      --bg: #f5f3ef;
+      --panel: #ffffff;
+      --ink: #1b1b1b;
+      --muted: #6a6a6a;
+      --accent: #0f4c5c;
+      --accent-2: #d9a441;
+      --border: #e2dfd7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #fdfbf7 0, var(--bg) 60%),
+                  radial-gradient(800px 500px at 110% 10%, #fff3db 0, #f5f3ef 60%);
+      color: var(--ink);
+    }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.8);
+      backdrop-filter: blur(6px);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    header h1 { margin: 0; font-size: 24px; letter-spacing: 0.5px; }
+    header p { margin: 4px 0 0; color: var(--muted); }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 24px 32px 48px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 24px rgba(27, 27, 27, 0.08);
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      color: var(--accent);
+    }
+    label { display: block; font-size: 12px; color: var(--muted); margin-top: 8px; }
+    input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: 4px;
+      font-size: 14px;
+    }
+    button {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary { background: var(--accent-2); color: #2b1f00; }
+    pre {
+      background: #f7f7f5;
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      overflow: auto;
+      max-height: 420px;
+    }
+    .status { margin-top: 8px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 920px) {
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Notary Service UI</h1>
+    <p>Prosta aplikacja UI do testowania integracji modułów</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Rejestracja spółki</h2>
+      <label>ID spółki</label>
+      <input id="company-id" placeholder="COMP-1" />
+      <label>Nazwa</label>
+      <input id="company-name" placeholder="Example Corp" />
+      <button id="company-btn">Zarejestruj</button>
+      <div class="status" id="company-status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Ustaw udziały</h2>
+      <label>Account ID</label>
+      <input id="shares-account" placeholder="Alice" />
+      <label>ID spółki</label>
+      <input id="shares-company" placeholder="COMP-1" />
+      <label>Liczba udziałów</label>
+      <input id="shares-count" type="number" value="100" />
+      <button id="shares-btn">Ustaw</button>
+      <div class="status" id="shares-status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Ustaw saldo</h2>
+      <label>Account ID</label>
+      <input id="balance-account" placeholder="Alice" />
+      <label>Saldo</label>
+      <input id="balance-amount" type="number" value="10000" />
+      <button id="balance-btn">Ustaw saldo</button>
+      <div class="status" id="balance-status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Transfer udziałów</h2>
+      <label>Sprzedający</label>
+      <input id="transfer-seller" placeholder="Alice" />
+      <label>Kupujący</label>
+      <input id="transfer-buyer" placeholder="Bob" />
+      <label>ID spółki</label>
+      <input id="transfer-company" placeholder="COMP-1" />
+      <label>Liczba udziałów</label>
+      <input id="transfer-shares" type="number" value="10" />
+      <label>Cena za udział</label>
+      <input id="transfer-price" type="number" value="50" />
+      <label>Document ID (opcjonalnie)</label>
+      <input id="transfer-doc-id" placeholder="(auto)" />
+      <button id="transfer-btn" class="secondary">Wykonaj</button>
+      <div class="status" id="transfer-status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Stan systemu</h2>
+      <button id="refresh-btn">Odśwież</button>
+      <pre id="state-view"></pre>
+    </section>
+  </main>
+
+  <script>
+    async function post(path, payload) {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      return res.json();
+    }
+
+    async function refresh() {
+      const res = await fetch("/api/state");
+      const data = await res.json();
+      document.getElementById("state-view").textContent = JSON.stringify(data, null, 2);
+    }
+
+    document.getElementById("company-btn").onclick = async () => {
+      const company_id = document.getElementById("company-id").value;
+      const name = document.getElementById("company-name").value;
+      const result = await post("/api/company", { company_id, name });
+      document.getElementById("company-status").textContent = JSON.stringify(result);
+      refresh();
+    };
+
+    document.getElementById("shares-btn").onclick = async () => {
+      const account_id = document.getElementById("shares-account").value;
+      const company_id = document.getElementById("shares-company").value;
+      const shares = Number(document.getElementById("shares-count").value);
+      const result = await post("/api/shares", { account_id, company_id, shares });
+      document.getElementById("shares-status").textContent = JSON.stringify(result);
+      refresh();
+    };
+
+    document.getElementById("balance-btn").onclick = async () => {
+      const account_id = document.getElementById("balance-account").value;
+      const balance = Number(document.getElementById("balance-amount").value);
+      const result = await post("/api/balance", { account_id, balance });
+      document.getElementById("balance-status").textContent = JSON.stringify(result);
+      refresh();
+    };
+
+    document.getElementById("transfer-btn").onclick = async () => {
+      const seller = document.getElementById("transfer-seller").value;
+      const buyer = document.getElementById("transfer-buyer").value;
+      const company_id = document.getElementById("transfer-company").value;
+      const shares_count = Number(document.getElementById("transfer-shares").value);
+      const price_per_share = Number(document.getElementById("transfer-price").value);
+      const document_id = document.getElementById("transfer-doc-id").value || null;
+      const result = await post("/api/transfer", { seller, buyer, company_id, shares_count, price_per_share, document_id });
+      document.getElementById("transfer-status").textContent = JSON.stringify(result);
+      refresh();
+    };
+
+    document.getElementById("refresh-btn").onclick = refresh;
+    refresh();
+  </script>
+</body>
+</html>
