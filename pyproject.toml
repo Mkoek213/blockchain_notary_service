@@ -12,6 +12,9 @@ license = {text = "MIT"}
 authors = [
     {name = "Notary Service Team", email = "team@notary-service.local"}
 ]
+dependencies = [
+    "cryptography>=41.0.0",
+]
 keywords = ["blockchain", "notary", "distributed-ledger"]
 classifiers = [
     "Development Status :: 3 - Alpha",

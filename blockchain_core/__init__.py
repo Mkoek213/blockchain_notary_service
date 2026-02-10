@@ -9,21 +9,17 @@ from .crypto_service import ICryptoService
 from .interfaces import INotaryValidator, IStorageProvider
 
 # Rozszerzone interfejsy dla zespołów
-from .interfaces_extended import (
+from .interfaces import (
     DocumentType,
     EventType,
     IBlockchainInterface,
     IBusinessLogicModule,
     ICertificateValidator,
-    IConnectionListener,
     IDocumentFactory,
     IIdentityManager,
     IKeyStore,
     ILedgerRepository,
-    INetworkModule,
     IWorldStateManager,
-    MessageType,
-    PeerState,
 )
 from .notarial_document import NotarialDocument, Transaction, VotingResult
 
@@ -41,7 +37,6 @@ __all__ = [
     "IConsensusProvider",
     "INotaryValidator",
     "ICryptoService",
-    # System zdarzeń (EventType from interfaces_extended)
     "EventType",
     # Interfejsy dla Business Logic
     "IBusinessLogicModule",
@@ -63,3 +58,19 @@ __all__ = [
 ]
 
 __version__ = "0.4.0"
+
+
+_NETWORK_EXPORTS = {
+    "INetworkModule",
+    "IConnectionListener",
+    "MessageType",
+    "PeerState",
+}
+
+
+def __getattr__(name: str):
+    if name not in _NETWORK_EXPORTS:
+        raise AttributeError(name)
+    from . import interfaces as _interfaces
+
+    return getattr(_interfaces, name)

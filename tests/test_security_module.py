@@ -2,6 +2,8 @@ import json
 import pytest
 import os
 import shutil
+
+pytest.importorskip("cryptography")
 from security import IdentityManager, BlockSigner
 from blockchain_core.block_builder import BlockBuilder
 from blockchain_core.notarial_document import Transaction
