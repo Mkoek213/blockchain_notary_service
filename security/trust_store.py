@@ -1,31 +1,32 @@
 from typing import List, Dict, Optional
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 from .certificate import X509Certificate
 
 class TrustStore:
     """
-    Przechowuje zaufane certyfikaty (CA) oraz zweryfikowane certyfikaty innych węzłów.
+    Przechowuje zaufane certyfikaty Root CA oraz zweryfikowane certyfikaty innych węzłów.
     """
     
     def __init__(self):
         self._trusted_roots: List[X509Certificate] = []
-        self._peer_certs: Dict[str, X509Certificate] = {} # Map subjectDN -> Cert
+        self._peer_certs: Dict[str, X509Certificate] = {} # Map Subject Name -> Cert
 
-    def add_trusted_root(self, cert: X509Certificate):
-        """Dodaje certyfikat CA do listy zaufanych."""
-        self._trusted_roots.append(cert)
+    def load_trusted_root(self, path: str):
+        """Ładuje certyfikat Root CA z pliku."""
+        with open(path, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+            self._trusted_roots.append(cert)
 
     def add_peer_certificate(self, cert: X509Certificate):
         """Dodaje certyfikat innego węzła (peera)."""
-        self._peer_certs[cert.get_subject_dn()] = cert
+        # Używamy sformatowanego Name jako klucza
+        subject_name = cert.subject.rfc4514_string()
+        self._peer_certs[subject_name] = cert
 
-    def get_cached_certificate(self, subject_dn: str) -> Optional[X509Certificate]:
-        """Pobiera certyfikat peera po Subject DN."""
-        return self._peer_certs.get(subject_dn)
-
-    def is_root_trusted(self, cert: X509Certificate) -> bool:
-        """Sprawdza czy dany certyfikat znajduje się na liście zaufanych rootów."""
-        # W uproszczeniu porównujemy po DN
+    def get_root_ca(self, issuer_name: x509.Name) -> Optional[X509Certificate]:
+        """Szuka zaufanego Root CA, który pasuje do podanego wystawcy (Issuer)."""
         for root in self._trusted_roots:
-            if root.get_subject_dn() == cert.get_subject_dn():
-                return True
-        return False
+            if root.subject == issuer_name:
+                return root
+        return None

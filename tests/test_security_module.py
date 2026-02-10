@@ -1,56 +1,67 @@
 import json
 import pytest
+import os
+import shutil
 from security import IdentityManager, BlockSigner
 from blockchain_core.block_builder import BlockBuilder
 from blockchain_core.notarial_document import Transaction
+from pki_setup import setup_pki, PKI_DIR
+
+@pytest.fixture(scope="session")
+def pki_environment():
+    """Fixture, który generuje klucze przed testami i sprząta po nich."""
+    # 1. Setup
+    print("\n[Fixture] Setting up PKI...")
+    setup_pki()
+    
+    yield
+    
+    # 2. Teardown (opcjonalnie - na razie zostawmy pliki do inspekcji)
+    # if os.path.exists(PKI_DIR):
+    #     shutil.rmtree(PKI_DIR)
 
 @pytest.fixture
-def security_components():
-    """Fixture initializing IdentityManager and BlockSigner for tests."""
-    identity_manager = IdentityManager()
-    # Generujemy nową tożsamość "w locie"
-    identity_manager.initialize_for_demo(subject_dn="CN=TestNode,O=NotaryService,C=PL")
-    signer = BlockSigner(identity_manager)
-    return identity_manager, signer
+def identity_manager(pki_environment):
+    """Fixture inicjalizujący IdentityManager z prawdziwymi kluczami."""
+    im = IdentityManager()
+    
+    im.load_identity(
+        key_path=os.path.join(PKI_DIR, "node", "node.key"),
+        cert_path=os.path.join(PKI_DIR, "node", "node.crt"),
+        trusted_root_path=os.path.join(PKI_DIR, "ca", "root_ca.crt")
+    )
+    return im
 
-def test_sign_and_verify_block(security_components):
-    identity_manager, signer = security_components
+def test_full_security_flow(identity_manager):
+    signer = BlockSigner(identity_manager)
     
-    # 1. Stwórz blok używając BlockBuilder
-    tx = Transaction("Alice", "Bob", 100.0)
-    
+    # 1. Tworzenie bloku
+    tx = Transaction("Alice", "Bob", 500.0)
     builder = BlockBuilder()
-    builder.set_parent_hash("0" * 64)
-    builder.set_author("CN=TestNode")
+    builder.set_parent_hash("abc" * 20)
+    builder.set_author("CN=Node-01")
     builder.add_document(tx)
-    
-    # Budujemy blok bez podpisywania przez stary mechanizm (crypto_service=None)
     block = builder.build()
     
-    print(f"Block hash before signing: {block.hash}")
-    print(f"Extra data before signing: {block.extra_data}")
-    
-    # 2. Podpisz blok używając nowego BlockSigner
+    # 2. Podpisywanie
     signed_block = signer.sign_block(block)
     
-    print(f"Block hash after signing: {signed_block.hash}")
-    print(f"Signature (extra_data): {signed_block.extra_data}")
+    print(f"Signed Hash: {signed_block.hash}")
+    print(f"Signature Len: {len(signed_block.extra_data)}")
     
-    assert len(signed_block.extra_data) > 0, "Block should have extra_data (signature)"
-    assert signed_block.hash != "0"*64, "Block hash should be calculated"
-
-    # 3. Weryfikacja podpisu
-    # Do weryfikacji potrzebujemy certyfikatu autora.
-    # W tym teście autor to my sami.
-    cert = identity_manager.get_self_certificate()
+    # 3. Weryfikacja
+    # Symulujemy, że inny węzeł otrzymuje blok.
+    # Musi pobrać certyfikat autora (zazwyczaj jest przesyłany z blokiem lub znany w sieci)
+    author_cert = identity_manager.get_self_certificate()
     
-    # Pobieramy dane, które były podpisane (te same co w BlockSigner)
+    # KROK A: Walidacja certyfikatu autora (czy jest od zaufanego Root CA?)
+    is_cert_valid = identity_manager.validate_peer(author_cert)
+    assert is_cert_valid, "Certyfikat autora powinien być zaufany (podpisany przez Root CA)"
+    
+    # KROK B: Weryfikacja podpisu pod blokiem
     signable_data = signed_block._get_signable_data()
     data_bytes = json.dumps(signable_data, sort_keys=True).encode('utf-8')
     signature_bytes = bytes.fromhex(signed_block.extra_data)
     
-    # Weryfikujemy używając IdentityManager (walidacja peera)
-    # Tutaj weryfikujemy podpis "peera" (którym jesteśmy my sami w tym teście)
-    is_valid = identity_manager.verify_peer_signature(data_bytes, signature_bytes, cert)
-    
-    assert is_valid, "Signature verification failed"
+    is_sig_valid = identity_manager.verify_peer_signature(data_bytes, signature_bytes, author_cert)
+    assert is_sig_valid, "Podpis bloku powinien być poprawny"
