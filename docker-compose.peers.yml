@@ -1,0 +1,83 @@
+version: "3.9"
+
+services:
+  ui-1:
+    build: .
+    command:
+      [
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--enable-network",
+        "--node-name",
+        "ui-1",
+        "--p2p-port",
+        "8545",
+        "--discovery-port",
+        "9999"
+      ]
+    ports:
+      - "8001:8000"
+    environment:
+      LOG_LEVEL: INFO
+  ui-2:
+    build: .
+    command:
+      [
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--enable-network",
+        "--node-name",
+        "ui-2",
+        "--p2p-port",
+        "8546",
+        "--discovery-port",
+        "9999"
+      ]
+    ports:
+      - "8002:8000"
+    environment:
+      LOG_LEVEL: INFO
+  ui-3:
+    build: .
+    command:
+      [
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--enable-network",
+        "--node-name",
+        "ui-3",
+        "--p2p-port",
+        "8547",
+        "--discovery-port",
+        "9999"
+      ]
+    ports:
+      - "8003:8000"
+    environment:
+      LOG_LEVEL: INFO
+  ui-4:
+    build: .
+    command:
+      [
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--enable-network",
+        "--node-name",
+        "ui-4",
+        "--p2p-port",
+        "8547",
+        "--discovery-port",
+        "9999"
+      ]
+    ports:
+      - "8004:8000"
+    environment:
+      LOG_LEVEL: INFO

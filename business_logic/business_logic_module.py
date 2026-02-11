@@ -83,6 +83,12 @@ class BusinessLogicModule(IBusinessLogicModule):
             return self._validate_shares_transfer_data(transaction_data)
         elif doc_type == "Transaction":
             return self._validate_financial_transaction(transaction_data)
+        elif doc_type == "CompanyRegistration":
+            return self._validate_company_registration(transaction_data)
+        elif doc_type == "SharesAllocation":
+            return self._validate_shares_allocation(transaction_data)
+        elif doc_type == "BalanceUpdate":
+            return self._validate_balance_update(transaction_data)
         elif doc_type == "Resolution":
             return self._validate_resolution(transaction_data)
         elif doc_type == "Dividend":
@@ -211,6 +217,29 @@ class BusinessLogicModule(IBusinessLogicModule):
         if balance < amount:
             return False
 
+        return True
+
+    def _validate_company_registration(self, data: Dict[str, Any]) -> bool:
+        company_id = data.get("company_id")
+        if not company_id:
+            return False
+        existing = self._world_state.get_company(company_id)
+        return existing is None
+
+    def _validate_shares_allocation(self, data: Dict[str, Any]) -> bool:
+        if not data.get("account_id") or not data.get("company_id"):
+            return False
+        shares = data.get("shares")
+        if not isinstance(shares, int):
+            return False
+        return shares >= 0
+
+    def _validate_balance_update(self, data: Dict[str, Any]) -> bool:
+        if not data.get("account_id"):
+            return False
+        balance = data.get("balance")
+        if not isinstance(balance, (int, float)):
+            return False
         return True
 
     def _validate_resolution(self, data: Dict[str, Any]) -> bool:

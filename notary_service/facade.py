@@ -28,6 +28,7 @@ class NotaryService:
         data_dir: str = "data",
         enable_network: bool = False,
         identity_manager: Optional["IdentityManager"] = None,
+        discovery_port: int = 9999,
         crypto_service: Optional[ICryptoService] = None,
     ) -> None:
         self.document_registry = DocumentRegistry()
@@ -60,6 +61,7 @@ class NotaryService:
             self.network_manager = NetworkManager(
                 chain=cast(IBlockchainInterface, self.blockchain),
                 identity_manager=identity_manager,
+                discovery_port=discovery_port,
             )
 
     def create_document(self, data: dict) -> NotarialDocument:

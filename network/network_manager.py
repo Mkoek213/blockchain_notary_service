@@ -1,6 +1,8 @@
+import logging
 import socket
 import threading
 import time
+import uuid
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from blockchain_core.interfaces import IBlockchainInterface
@@ -11,6 +13,8 @@ from .peer_manager import PeerManager
 from .synchronizer import BlockSynchronizer
 from .types import MessageType
 
+logger = logging.getLogger(__name__)
+
 
 if TYPE_CHECKING:
     from security.identity_manager import IdentityManager
@@ -20,20 +24,35 @@ class NetworkManager:
     def __init__(
         self,
         chain: IBlockchainInterface,
-        identity_manager: Optional["IdentityManager"] = None,
+        identity_manager: Optional["IdentityManager"],
         listen_port: int = 8545,
         discovery_port: int = 9999,
         max_peers: int = 3,
     ) -> None:
+        if identity_manager is None:
+            raise ValueError("identity_manager is required")
         self.chain = chain
         self.identity_manager = identity_manager
         self.listen_port = listen_port
         self.discovery_port = discovery_port
-        self.peer_manager = PeerManager(chain, identity_manager, max_peers, listen_port)
+        self._node_id = self._get_node_id(listen_port)
+        self.peer_manager = PeerManager(
+            chain,
+            identity_manager,
+            max_peers,
+            listen_port,
+            local_node_id=self._node_id,
+        )
         self.synchronizer = BlockSynchronizer(chain, self.peer_manager)
         self.peer_manager.set_synchronizer(self.synchronizer)
-        node_id = self._get_node_id()
-        self.discovery = DiscoveryService(node_id, listen_port, discovery_port)
+        self.discovery = DiscoveryService(
+            self._node_id,
+            listen_port,
+            discovery_port,
+            active_peers_provider=self.peer_manager.get_peer_count,
+            max_peers=max_peers,
+            peer_filter=lambda ip, port: not self.peer_manager.is_known_address(ip, port),
+        )
         self._server_socket: Optional[socket.socket] = None
         self._server_thread = threading.Thread(target=self._server_loop, daemon=True)
         self._discovery_thread = threading.Thread(target=self._discovery_loop, daemon=True)
@@ -43,6 +62,9 @@ class NetworkManager:
         self.listen_port = port
         self.discovery.tcp_port = port
         self.peer_manager.local_port = port
+        self._node_id = self._get_node_id(port)
+        self.discovery.node_id = self._node_id
+        logger.info("network manager starting on port %s", port)
         if not self._server_thread.is_alive():
             self._server_thread.start()
         self.discovery.start_listener()
@@ -58,16 +80,19 @@ class NetworkManager:
                 self._server_socket.close()
             except OSError:
                 pass
+        logger.info("network manager stopped")
 
     def broadcast_block(self, block: Any) -> None:
         payload = block.to_dict() if hasattr(block, "to_dict") else block
         msg = NetworkMessage(type=MessageType.BLOCK, payload=payload)
         self.peer_manager.broadcast(msg)
+        logger.info("broadcasted block")
 
     def broadcast_transaction(self, transaction: Any) -> None:
         payload = transaction.to_dict() if hasattr(transaction, "to_dict") else transaction
         msg = NetworkMessage(type=MessageType.TRANSACTION, payload=payload)
         self.peer_manager.broadcast(msg)
+        logger.info("broadcasted transaction")
 
     def broadcast_tx(self, tx: Dict[str, Any]) -> None:
         self.broadcast_transaction(tx)
@@ -81,8 +106,9 @@ class NetworkManager:
     def _discovery_loop(self) -> None:
         while not self._stop_event.is_set():
             peers = self.discovery.get_new_peers()
-            for ip, port in peers:
-                self.peer_manager.connect_to(ip, port)
+            for ip, port, node_id in peers:
+                self.peer_manager.add_candidate(ip, port, node_id)
+            self.peer_manager.maintain_connections()
             time.sleep(1.0)
 
     def _server_loop(self) -> None:
@@ -100,10 +126,8 @@ class NetworkManager:
                 return
             self.peer_manager.add_incoming_connection(client, address)
 
-    def _get_node_id(self) -> str:
-        if self.identity_manager is None:
-            return ""
+    def _get_node_id(self, listen_port: int) -> str:
         cert = self.identity_manager.get_self_certificate()
         if cert is None:
-            return ""
+            return f"peer-{listen_port}-{uuid.uuid4().hex[:8]}"
         return cert.subject.rfc4514_string()

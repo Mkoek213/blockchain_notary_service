@@ -1,12 +1,20 @@
 import argparse
 import json
+import logging
+import os
 import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from blockchain_core.interfaces import IBlockchainInterface
 from network.network_manager import NetworkManager
+from security.identity_manager import IdentityManager
+from pki_setup import CA_DIR, NODE_DIR, generate_node_identity, setup_pki
 
 
 @dataclass
@@ -79,6 +87,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--message", type=str, default="")
     parser.add_argument("--interval", type=float, default=0.0)
     parser.add_argument("--no-stdin", action="store_true")
+    parser.add_argument("--key-path", type=str, default="")
+    parser.add_argument("--cert-path", type=str, default="")
+    parser.add_argument("--ca-path", type=str, default="")
     return parser
 
 
@@ -106,20 +117,39 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+    if not args.key_path or not args.cert_path or not args.ca_path:
+        setup_pki()
+        node_key_path, node_cert_path = generate_node_identity(args.name, NODE_DIR, CA_DIR)
+        args.key_path = args.key_path or node_key_path
+        args.cert_path = args.cert_path or node_cert_path
+        args.ca_path = args.ca_path or os.path.join(CA_DIR, "root_ca.crt")
+
+    identity_manager = IdentityManager()
+    identity_manager.load_identity(
+        key_path=args.key_path,
+        cert_path=args.cert_path,
+        trusted_root_path=args.ca_path,
+    )
     chain = DemoBlockchain()
     manager = NetworkManager(
         chain=chain,
-        identity_manager=None,
+        identity_manager=identity_manager,
         listen_port=args.port,
         discovery_port=args.discovery_port,
     )
     manager.start(args.port)
     print(f"[node] {args.name} listening on {args.port}")
+    print(f"[node] discovery on udp {args.discovery_port}")
 
     peers = parse_peers(args.peer)
     for host, port in peers:
-        manager.peer_manager.connect_to(host, port)
+        manager.peer_manager.add_candidate(host, port)
         print(f"[node] connecting to {host}:{port}")
+    manager.peer_manager.maintain_connections()
 
     if args.message:
         run_broadcast_loop(manager, args.name, args.message, args.interval)

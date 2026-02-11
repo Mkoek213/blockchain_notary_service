@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from queue import Queue
 from typing import Any, Dict, List, Optional
 
+import pytest
+
+pytest.importorskip("cryptography")
+
 from blockchain_core.block_builder import BlockBuilder
 from blockchain_core.notarial_document import Transaction, VotingResult
 from network.block_adapter import block_from_dict, document_from_dict
@@ -41,6 +45,19 @@ class StubChain:
 class StubPeer:
     remote_height: int
     sent: List[NetworkMessage]
+class DummyIdentityManager:
+    def get_self_certificate(self) -> Any:
+        return None
+
+    def sign_data(self, data: bytes) -> bytes:
+        return b""
+
+    def validate_peer(self, cert: Any) -> bool:
+        return False
+
+    def verify_peer_signature(self, data: bytes, signature: bytes, cert: Any) -> bool:
+        return False
+
 
     def send(self, msg: NetworkMessage) -> None:
         self.sent.append(msg)
@@ -112,7 +129,7 @@ def test_synchronizer_requests_blocks_when_peer_is_ahead() -> None:
 def test_peer_manager_handles_get_blocks() -> None:
     chain = StubChain()
     chain.block_store.append(block_from_dict(build_block_dict()))
-    manager = PeerManager(chain, None)
+    manager = PeerManager(chain, DummyIdentityManager())
 
     class Sender:
         def __init__(self) -> None:
@@ -132,7 +149,7 @@ def test_peer_manager_handles_get_blocks() -> None:
 
 def test_peer_manager_handles_transaction_and_block() -> None:
     chain = StubChain()
-    manager = PeerManager(chain, None)
+    manager = PeerManager(chain, DummyIdentityManager())
     tx_msg = NetworkMessage(type=MessageType.TRANSACTION, payload={"id": "tx1"})
     manager.on_message(tx_msg, manager)
     assert chain.received_transactions == [{"id": "tx1"}]

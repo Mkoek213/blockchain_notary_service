@@ -52,13 +52,18 @@
       color: var(--accent);
     }
     label { display: block; font-size: 12px; color: var(--muted); margin-top: 8px; }
-    input {
+    input,
+    select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--border);
       border-radius: 8px;
       margin-top: 4px;
       font-size: 14px;
+    }
+    select:disabled {
+      background: #f0efeb;
+      color: var(--muted);
     }
     button {
       margin-top: 12px;
@@ -94,21 +99,21 @@
 
   <main>
     <section class="panel">
-      <h2>Rejestracja spółki</h2>
-      <label>ID spółki</label>
-      <input id="company-id" placeholder="COMP-1" />
-      <label>Nazwa</label>
-      <input id="company-name" placeholder="Example Corp" />
+      <h2>Rejestracja podmiotu</h2>
+      <label>ID podmiotu</label>
+      <input id="company-id" placeholder="ENTITY-1" />
+      <label>Nazwa (opcjonalnie)</label>
+      <input id="company-name" placeholder="Example" />
       <button id="company-btn">Zarejestruj</button>
       <div class="status" id="company-status"></div>
     </section>
 
     <section class="panel">
       <h2>Ustaw udziały</h2>
-      <label>Account ID</label>
-      <input id="shares-account" placeholder="Alice" />
+      <label>ID podmiotu</label>
+      <select id="shares-account"></select>
       <label>ID spółki</label>
-      <input id="shares-company" placeholder="COMP-1" />
+      <select id="shares-company"></select>
       <label>Liczba udziałów</label>
       <input id="shares-count" type="number" value="100" />
       <button id="shares-btn">Ustaw</button>
@@ -117,8 +122,8 @@
 
     <section class="panel">
       <h2>Ustaw saldo</h2>
-      <label>Account ID</label>
-      <input id="balance-account" placeholder="Alice" />
+      <label>ID podmiotu</label>
+      <select id="balance-account"></select>
       <label>Saldo</label>
       <input id="balance-amount" type="number" value="10000" />
       <button id="balance-btn">Ustaw saldo</button>
@@ -127,18 +132,22 @@
 
     <section class="panel">
       <h2>Transfer udziałów</h2>
-      <label>Sprzedający</label>
-      <input id="transfer-seller" placeholder="Alice" />
-      <label>Kupujący</label>
-      <input id="transfer-buyer" placeholder="Bob" />
-      <label>ID spółki</label>
-      <input id="transfer-company" placeholder="COMP-1" />
-      <label>Liczba udziałów</label>
-      <input id="transfer-shares" type="number" value="10" />
-      <label>Cena za udział</label>
-      <input id="transfer-price" type="number" value="50" />
-      <label>Document ID (opcjonalnie)</label>
-      <input id="transfer-doc-id" placeholder="(auto)" />
+      <label>Sprzedający (ID podmiotu)</label>
+      <select id="transfer-seller"></select>
+      <label>Kupujący (ID podmiotu)</label>
+      <select id="transfer-buyer" disabled></select>
+      <label>Akcja</label>
+      <select id="transfer-action" disabled></select>
+      <div id="transfer-fields" style="display:none;">
+        <label>ID spółki</label>
+        <select id="transfer-company"></select>
+        <label>Liczba udziałów</label>
+        <input id="transfer-shares" type="number" value="10" />
+        <label>Cena za udział</label>
+        <input id="transfer-price" type="number" value="50" />
+        <label>Document ID (opcjonalnie)</label>
+        <input id="transfer-doc-id" placeholder="(auto)" />
+      </div>
       <button id="transfer-btn" class="secondary">Wykonaj</button>
       <div class="status" id="transfer-status"></div>
     </section>
@@ -147,6 +156,18 @@
       <h2>Stan systemu</h2>
       <button id="refresh-btn">Odśwież</button>
       <pre id="state-view"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>Bloki blockchain</h2>
+      <label>Numer bloku</label>
+      <input id="block-height" type="number" min="0" value="0" />
+      <div>
+        <button id="block-prev" class="secondary">← Poprzedni</button>
+        <button id="block-next" class="secondary">Następny →</button>
+      </div>
+      <div class="status" id="block-status"></div>
+      <pre id="block-view"></pre>
     </section>
   </main>
 
@@ -160,10 +181,88 @@
       return res.json();
     }
 
+    function populateSelect(select, options, placeholder) {
+      const current = select.value;
+      select.innerHTML = "";
+      const placeholderOption = document.createElement("option");
+      placeholderOption.value = "";
+      placeholderOption.textContent = placeholder;
+      select.appendChild(placeholderOption);
+      for (const opt of options) {
+        const option = document.createElement("option");
+        option.value = opt.value;
+        option.textContent = opt.label;
+        select.appendChild(option);
+      }
+      if (current && options.some((opt) => opt.value === current)) {
+        select.value = current;
+      } else {
+        select.value = "";
+      }
+    }
+
+    function buildAccountOptions(state) {
+      if (Array.isArray(state?.entities)) {
+        return state.entities
+          .map((id) => String(id))
+          .sort()
+          .map((id) => ({ value: id, label: id }));
+      }
+      const accounts = new Set();
+      if (state?.balances) {
+        Object.keys(state.balances).forEach((key) => accounts.add(key));
+      }
+      if (Array.isArray(state?.shares)) {
+        state.shares.forEach((entry) => accounts.add(entry.account_id));
+      }
+      if (state?.companies) {
+        Object.keys(state.companies).forEach((key) => accounts.add(key));
+      }
+      return Array.from(accounts)
+        .sort()
+        .map((id) => ({ value: id, label: id }));
+    }
+
+    function buildCompanyOptions(state) {
+      const companies = state?.companies || {};
+      return Object.keys(companies)
+        .sort()
+        .map((id) => ({ value: id, label: `${id} — ${companies[id].name || ""}`.trim() }));
+    }
+
+    function updateSelectors(state) {
+      const accountOptions = buildAccountOptions(state);
+      const companyOptions = buildCompanyOptions(state);
+
+      populateSelect(document.getElementById("shares-account"), accountOptions, "— wybierz konto —");
+      populateSelect(document.getElementById("balance-account"), accountOptions, "— wybierz konto —");
+      populateSelect(document.getElementById("transfer-seller"), accountOptions, "— wybierz sprzedającego —");
+      populateSelect(document.getElementById("transfer-buyer"), accountOptions, "— wybierz kupującego —");
+      populateSelect(document.getElementById("shares-company"), companyOptions, "— wybierz spółkę —");
+      populateSelect(document.getElementById("transfer-company"), companyOptions, "— wybierz spółkę —");
+
+      const actionOptions = [{ value: "SharesTransfer", label: "Transfer udziałów" }];
+      populateSelect(document.getElementById("transfer-action"), actionOptions, "— wybierz akcję —");
+      updateTransferFlow();
+    }
+
     async function refresh() {
       const res = await fetch("/api/state");
       const data = await res.json();
       document.getElementById("state-view").textContent = JSON.stringify(data, null, 2);
+      updateSelectors(data.state);
+      return data;
+    }
+
+    async function loadBlock(height) {
+      const res = await fetch(`/api/block?height=${height}`);
+      const data = await res.json();
+      document.getElementById("block-view").textContent = JSON.stringify(data.block, null, 2);
+      document.getElementById("block-status").textContent = `height: ${data.height} / max: ${data.max_height}`;
+      if (data.height !== null && data.height !== undefined) {
+        document.getElementById("block-height").value = data.height;
+      }
+      return data;
     }
 
     document.getElementById("company-btn").onclick = async () => {
@@ -178,6 +277,10 @@
       const account_id = document.getElementById("shares-account").value;
       const company_id = document.getElementById("shares-company").value;
       const shares = Number(document.getElementById("shares-count").value);
+      if (!account_id || !company_id) {
+        document.getElementById("shares-status").textContent = "Wybierz konto i spółkę";
+        return;
+      }
       const result = await post("/api/shares", { account_id, company_id, shares });
       document.getElementById("shares-status").textContent = JSON.stringify(result);
       refresh();
@@ -186,25 +289,90 @@
     document.getElementById("balance-btn").onclick = async () => {
       const account_id = document.getElementById("balance-account").value;
       const balance = Number(document.getElementById("balance-amount").value);
+      if (!account_id) {
+        document.getElementById("balance-status").textContent = "Wybierz konto";
+        return;
+      }
       const result = await post("/api/balance", { account_id, balance });
       document.getElementById("balance-status").textContent = JSON.stringify(result);
       refresh();
     };
 
+    const transferSeller = document.getElementById("transfer-seller");
+    const transferBuyer = document.getElementById("transfer-buyer");
+    const transferAction = document.getElementById("transfer-action");
+    const transferFields = document.getElementById("transfer-fields");
+
+    function updateTransferFlow() {
+      const seller = transferSeller.value;
+      const buyer = transferBuyer.value;
+      transferBuyer.disabled = !seller;
+      transferAction.disabled = !seller || !buyer;
+      if (!seller || !buyer) {
+        transferBuyer.value = "";
+        transferAction.value = "";
+        transferFields.style.display = "none";
+        return;
+      }
+      transferFields.style.display = transferAction.value === "SharesTransfer" ? "block" : "none";
+    }
+
+    transferSeller.onchange = () => {
+      updateTransferFlow();
+    };
+
+    transferBuyer.onchange = () => {
+      updateTransferFlow();
+    };
+
+    transferAction.onchange = () => {
+      transferFields.style.display = transferAction.value === "SharesTransfer" ? "block" : "none";
+    };
+
     document.getElementById("transfer-btn").onclick = async () => {
-      const seller = document.getElementById("transfer-seller").value;
-      const buyer = document.getElementById("transfer-buyer").value;
-      const company_id = document.getElementById("transfer-company").value;
-      const shares_count = Number(document.getElementById("transfer-shares").value);
-      const price_per_share = Number(document.getElementById("transfer-price").value);
-      const document_id = document.getElementById("transfer-doc-id").value || null;
-      const result = await post("/api/transfer", { seller, buyer, company_id, shares_count, price_per_share, document_id });
-      document.getElementById("transfer-status").textContent = JSON.stringify(result);
-      refresh();
+      const seller = transferSeller.value;
+      const buyer = transferBuyer.value;
+      const action = transferAction.value;
+      if (!seller || !buyer || !action) {
+        document.getElementById("transfer-status").textContent = "Wybierz sprzedającego, kupującego i akcję";
+        return;
+      }
+      if (action === "SharesTransfer") {
+        const company_id = document.getElementById("transfer-company").value;
+        const shares_count = Number(document.getElementById("transfer-shares").value);
+        const price_per_share = Number(document.getElementById("transfer-price").value);
+        const document_id = document.getElementById("transfer-doc-id").value || null;
+        if (!company_id) {
+          document.getElementById("transfer-status").textContent = "Wybierz spółkę";
+          return;
+        }
+        const result = await post("/api/transfer", { seller, buyer, company_id, shares_count, price_per_share, document_id });
+        document.getElementById("transfer-status").textContent = JSON.stringify(result);
+        refresh();
+        return;
+      }
+      document.getElementById("transfer-status").textContent = "Nieobsługiwana akcja";
+    };
+
+    document.getElementById("block-prev").onclick = async () => {
+      const current = Number(document.getElementById("block-height").value || 0);
+      const nextHeight = Math.max(0, current - 1);
+      await loadBlock(nextHeight);
+    };
+
+    document.getElementById("block-next").onclick = async () => {
+      const current = Number(document.getElementById("block-height").value || 0);
+      await loadBlock(current + 1);
+    };
+
+    document.getElementById("block-height").onchange = async (event) => {
+      const value = Number(event.target.value || 0);
+      await loadBlock(value);
     };
 
     document.getElementById("refresh-btn").onclick = refresh;
     refresh();
+    loadBlock(0);
   </script>
 </body>
 </html>

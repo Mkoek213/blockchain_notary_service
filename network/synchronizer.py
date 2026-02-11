@@ -36,6 +36,9 @@ class BlockSynchronizer:
         for block_data in blocks_data:
             block = block_from_dict(block_data)
             if block is None:
-                continue
-            self.chain.validate_and_add_block(block)
+                self.is_syncing = False
+                return
+            if not self.chain.validate_and_add_block(block):
+                self.is_syncing = False
+                return
         self.is_syncing = False

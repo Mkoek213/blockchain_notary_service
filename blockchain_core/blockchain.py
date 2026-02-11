@@ -7,10 +7,10 @@ from typing import Any, Dict, List, Optional
 
 from .block_builder import Block, BlockBuilder
 from .crypto_service import ICryptoService
-from .interfaces import INotaryValidator, IStorageProvider
+from .interfaces import IBlockchainInterface, INotaryValidator, IStorageProvider
 
 
-class Blockchain:
+class Blockchain(IBlockchainInterface):
     """
     Główna klasa zarządzająca blockchain dla serwisu notarialnego.
 
@@ -71,7 +71,7 @@ class Blockchain:
         genesis_block = (
             builder.set_parent_hash("0")
             .set_author("genesis")
-            .set_timestamp(datetime.now().timestamp())
+            .set_timestamp(1.0)
             .build()
         )
 

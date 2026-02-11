@@ -37,6 +37,9 @@ class NotaryValidator(INotaryValidator):
 
     # Znane typy dokumentów i ich wymagane pola
     _REQUIRED_FIELDS = {
+        "CompanyRegistration": ["company_id", "name"],
+        "SharesAllocation": ["account_id", "company_id", "shares"],
+        "BalanceUpdate": ["account_id", "balance"],
         "SharesTransfer": ["seller", "buyer", "company_id", "shares_count", "price_per_share"],
         "Transaction": ["sender", "recipient", "amount"],
         "VotingResult": ["voting_id", "results"],
@@ -164,6 +167,8 @@ class NotaryValidator(INotaryValidator):
             return self._validate_shares_transfer(data)
         elif doc_type == "Transaction":
             return self._validate_transaction(data)
+        elif doc_type in {"CompanyRegistration", "SharesAllocation", "BalanceUpdate"}:
+            return True
         elif doc_type == "VotingResult":
             return self._validate_voting_result(data)
         elif doc_type == "Resolution":

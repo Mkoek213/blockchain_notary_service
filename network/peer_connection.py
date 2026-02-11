@@ -1,15 +1,12 @@
 import json
+import logging
 import socket
 import threading
 from queue import Empty, Queue
 from typing import Any, Dict, Optional, Protocol, Tuple, TYPE_CHECKING
 
-try:
-    from cryptography import x509
-    from cryptography.hazmat.primitives.serialization import Encoding
-except Exception:  # pragma: no cover
-    x509 = None
-    Encoding = None
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import Encoding
 
 from blockchain_core.interfaces import IBlockchainInterface
 
@@ -18,6 +15,8 @@ if TYPE_CHECKING:
     from security.identity_manager import IdentityManager
 
 from .message import NetworkMessage
+
+logger = logging.getLogger(__name__)
 
 
 class IConnectionListener(Protocol):
@@ -35,6 +34,8 @@ class IPeerConnection(Protocol):
     remote_height: int
     remote_hash: str
     peer_id: str
+    address: Tuple[str, int]
+    remote_endpoint: Tuple[str, int]
 
     def send(self, msg: NetworkMessage) -> None:
         ...
@@ -53,6 +54,8 @@ class PeerConnection(IPeerConnection):
         chain: IBlockchainInterface,
         local_port: int,
     ) -> None:
+        if identity_manager is None:
+            raise ValueError("identity_manager is required")
         self.socket = sock
         self.address = address
         self.listener = listener
@@ -65,6 +68,7 @@ class PeerConnection(IPeerConnection):
         self.remote_hash = ""
         self.peer_id = ""
         self.remote_certificate_pem: Optional[str] = None
+        self.remote_endpoint = self.address
         self._stop_event = threading.Event()
         self._sender_thread = threading.Thread(target=self._send_loop, daemon=True)
         self._receiver_thread = threading.Thread(target=self._listen_loop, daemon=True)
@@ -74,6 +78,7 @@ class PeerConnection(IPeerConnection):
 
     def send(self, msg: NetworkMessage) -> None:
         self.out_queue.put(msg)
+        logger.info("queued message %s to %s", msg.type.value, self.address)
 
     def close(self) -> None:
         if self._stop_event.is_set():
@@ -103,6 +108,7 @@ class PeerConnection(IPeerConnection):
                 self._stop_event.set()
                 self.listener.on_disconnect(self)
                 return
+            logger.info("sent message %s to %s", msg.type.value, self.address)
 
     def _listen_loop(self) -> None:
         buffer = ""
@@ -131,6 +137,7 @@ class PeerConnection(IPeerConnection):
                     continue
                 if not self._verify_message(msg):
                     continue
+                logger.info("received message %s from %s", msg.type.value, self.address)
                 self.listener.on_message(msg, self)
 
     def _perform_handshake(self) -> None:
@@ -157,22 +164,19 @@ class PeerConnection(IPeerConnection):
         self.remote_hash = str(payload.get("latest_hash", ""))
         self.peer_id = str(payload.get("node_id", ""))
         self.remote_certificate_pem = certificate_pem if certificate_pem else None
+        remote_port = int(payload.get("port", self.address[1]))
+        self.remote_endpoint = (self.address[0], remote_port)
         self.state = PeerState.READY
+        logger.info("handshake completed with %s", self.address)
         self.listener.on_handshake_complete(self)
 
     def _get_node_id(self) -> str:
-        if self.identity_manager is None:
-            return ""
         cert = self.identity_manager.get_self_certificate()
         if cert is None:
             return ""
         return cert.subject.rfc4514_string()
 
     def _get_certificate_pem(self) -> str:
-        if self.identity_manager is None:
-            return ""
-        if Encoding is None:
-            return ""
         cert = self.identity_manager.get_self_certificate()
         if cert is None:
             return ""
@@ -196,11 +200,7 @@ class PeerConnection(IPeerConnection):
     def _verify_message(self, msg: NetworkMessage) -> bool:
         if not msg.signature:
             return False
-        if self.identity_manager is None:
-            return True
         if not self.remote_certificate_pem:
-            return False
-        if x509 is None:
             return False
         try:
             cert = x509.load_pem_x509_certificate(self.remote_certificate_pem.encode("utf-8"))
@@ -214,11 +214,7 @@ class PeerConnection(IPeerConnection):
         return self.identity_manager.verify_peer_signature(data, signature, cert)
 
     def _validate_handshake(self, msg: NetworkMessage, certificate_pem: str) -> bool:
-        if self.identity_manager is None:
-            return True
         if not certificate_pem:
-            return False
-        if x509 is None:
             return False
         try:
             cert = x509.load_pem_x509_certificate(certificate_pem.encode("utf-8"))

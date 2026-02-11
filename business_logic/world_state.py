@@ -87,6 +87,12 @@ class SimpleWorldState:
             # Przetwarzaj w zależności od typu dokumentu
             if doc_type == "SharesTransfer":
                 self._apply_shares_transfer(doc_data)
+            elif doc_type == "CompanyRegistration":
+                self._apply_company_registration(doc_data)
+            elif doc_type == "SharesAllocation":
+                self._apply_shares_allocation(doc_data)
+            elif doc_type == "BalanceUpdate":
+                self._apply_balance_update(doc_data)
             elif doc_type == "Transaction":
                 self._apply_transaction(doc_data)
             elif doc_type == "Dividend":
@@ -175,6 +181,22 @@ class SimpleWorldState:
 
         self._balances[sender] = self._balances.get(sender, 0) - amount
         self._balances[recipient] = self._balances.get(recipient, 0) + amount
+
+    def _apply_company_registration(self, data: Dict[str, Any]) -> None:
+        company_id = data["company_id"]
+        name = data.get("name", "")
+        self._companies[company_id] = {"id": company_id, "name": name}
+
+    def _apply_shares_allocation(self, data: Dict[str, Any]) -> None:
+        account_id = data["account_id"]
+        company_id = data["company_id"]
+        shares = int(data.get("shares", 0))
+        self._shares[(account_id, company_id)] = shares
+
+    def _apply_balance_update(self, data: Dict[str, Any]) -> None:
+        account_id = data["account_id"]
+        balance = float(data.get("balance", 0))
+        self._balances[account_id] = balance
 
     def _apply_dividend(self, data: Dict[str, Any]) -> None:
         """
