@@ -132,6 +132,10 @@ class PeerManager(IConnectionListener):
                 logger.warning("rejected incoming %s:%s (max peers reached)", address[0], address[1])
                 sock.close()
                 return
+            if self._is_known_address(address[0], address[1]):
+                logger.info("rejected duplicate incoming %s:%s", address[0], address[1])
+                sock.close()
+                return
         peer = PeerConnection(
             sock,
             address,
@@ -166,6 +170,10 @@ class PeerManager(IConnectionListener):
     def get_peer_count(self) -> int:
         with self._lock:
             return len(self.peers)
+
+    def get_peer_snapshots(self) -> List[Tuple[str, int, str]]:
+        with self._lock:
+            return [(peer.peer_id, peer.remote_height, peer.remote_hash) for peer in self.peers.values()]
 
     def is_known_address(self, ip: str, port: int) -> bool:
         with self._lock:
@@ -220,7 +228,10 @@ class PeerManager(IConnectionListener):
                 self._pending_node_ids.discard(sender.peer_id)
         if sender.peer_id and sender.peer_id in self.peers:
             return
-        if getattr(sender, "remote_endpoint", None) is not None:
+        if getattr(sender, "suppress_reconnect", False):
+            logger.info("peer disconnected (no reconnect) %s", sender.peer_id)
+            return
+        if sender.peer_id and getattr(sender, "remote_endpoint", None) is not None:
             peer_id = sender.peer_id or None
             self.add_candidate(sender.remote_endpoint[0], sender.remote_endpoint[1], peer_id)
         logger.info("peer disconnected %s", sender.peer_id)
@@ -229,15 +240,22 @@ class PeerManager(IConnectionListener):
     def on_handshake_complete(self, sender: IPeerConnection) -> None:
         with self._lock:
             if sender.peer_id == self.local_node_id:
+                setattr(sender, "suppress_reconnect", True)
                 sender.close()
                 if sender in self.pending_peers:
                     self.pending_peers.remove(sender)
                 return
             if sender.peer_id in self.peers:
+                setattr(sender, "suppress_reconnect", True)
                 sender.close()
+                if sender in self.pending_peers:
+                    self.pending_peers.remove(sender)
                 return
             if len(self.peers) >= self.max_peers:
+                setattr(sender, "suppress_reconnect", True)
                 sender.close()
+                if sender in self.pending_peers:
+                    self.pending_peers.remove(sender)
                 return
             self.peers[sender.peer_id] = sender
             self._pending_node_ids.discard(sender.peer_id)

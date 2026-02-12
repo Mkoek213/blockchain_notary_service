@@ -36,6 +36,14 @@ class JsonLedgerRepository(ILedgerRepository):
     def get_full_chain(self) -> List[Any]:
         return list(self._blocks)
 
+    def replace_chain(self, blocks: List[Dict[str, Any]]) -> bool:
+        try:
+            self._blocks = list(blocks)
+            self._write_blocks()
+            return True
+        except Exception:
+            return False
+
     def _load_from_disk(self) -> List[Dict[str, Any]]:
         if not os.path.exists(self.path):
             return []

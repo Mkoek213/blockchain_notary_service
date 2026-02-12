@@ -19,6 +19,8 @@ class DiscoveryService:
         active_peers_provider: Optional[Callable[[], int]] = None,
         max_peers: int = 3,
         peer_filter: Optional[Callable[[str, int], bool]] = None,
+        advertise_ip: Optional[str] = None,
+        broadcast_addr: Optional[str] = None,
     ) -> None:
         self.node_id = node_id
         self.tcp_port = tcp_port
@@ -27,6 +29,8 @@ class DiscoveryService:
         self.active_peers_provider = active_peers_provider
         self.max_peers = max_peers
         self.peer_filter = peer_filter
+        self.advertise_ip = advertise_ip
+        self.broadcast_addr = broadcast_addr
         self._found_peers: Queue[Tuple[str, int, str]] = Queue()
         self._seen_peers: Dict[str, Tuple[str, int, float]] = {}
         self._seen_ttl = 30.0
@@ -92,18 +96,31 @@ class DiscoveryService:
     def _broadcast_loop(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        advertised_ip = socket.gethostbyname(socket.gethostname())
+        advertised_ip = self._resolve_advertise_ip()
         payload = json.dumps(
             {"node_id": self.node_id, "port": self.tcp_port, "ip": advertised_ip}
         ).encode("utf-8")
+        target_addr = self.broadcast_addr or "<broadcast>"
         try:
             while not self._stop_event.is_set():
                 if self.active_peers_provider is not None:
                     if self.active_peers_provider() >= self.max_peers:
                         time.sleep(self.broadcast_interval)
                         continue
-                sock.sendto(payload, ("<broadcast>", self.discovery_port))
+                sock.sendto(payload, (target_addr, self.discovery_port))
                 logger.debug("broadcasted presence")
                 time.sleep(self.broadcast_interval)
         finally:
             sock.close()
+
+    def _resolve_advertise_ip(self) -> str:
+        if self.advertise_ip:
+            return self.advertise_ip
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+            sock.close()
+            return ip
+        except OSError:
+            return socket.gethostbyname(socket.gethostname())

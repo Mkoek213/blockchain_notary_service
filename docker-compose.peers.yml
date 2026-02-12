@@ -3,6 +3,7 @@ version: "3.9"
 services:
   ui-1:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -25,8 +26,16 @@ services:
       - "8001:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-2:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -49,8 +58,16 @@ services:
       - "8002:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-3:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -73,8 +90,16 @@ services:
       - "8003:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-4:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -97,8 +122,16 @@ services:
       - "8004:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-5:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -121,8 +154,16 @@ services:
       - "8005:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-6:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -145,8 +186,16 @@ services:
       - "8006:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-7:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -169,8 +218,16 @@ services:
       - "8007:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-8:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -193,8 +250,16 @@ services:
       - "8008:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
   ui-9:
     build: .
+    image: notary-ui:latest
     command:
       [
         "--host",
@@ -217,3 +282,14 @@ services:
       - "8009:8000"
     environment:
       LOG_LEVEL: INFO
+    networks:
+      - notary_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+networks:
+  notary_net:
+    external: true

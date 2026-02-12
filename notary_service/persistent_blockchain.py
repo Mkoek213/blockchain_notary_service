@@ -62,3 +62,23 @@ class PersistentBlockchain(Blockchain):
             except Exception:
                 pass
         return success
+
+    def replace_chain(self, blocks) -> bool:
+        if not self._validate_blocks(blocks):
+            return False
+        self.chain = list(blocks)
+        if self.storage_provider is not None:
+            ledger = getattr(self.storage_provider, "ledger", None)
+            if ledger is not None and hasattr(ledger, "replace_chain"):
+                ledger.replace_chain([b.to_dict() for b in blocks])
+            elif hasattr(self.storage_provider, "replace_chain"):
+                self.storage_provider.replace_chain([b.to_dict() for b in blocks])
+        if self.world_state_manager is not None:
+            try:
+                if hasattr(self.world_state_manager, "rollback_to_height"):
+                    self.world_state_manager.rollback_to_height(len(blocks))
+                elif hasattr(self.world_state_manager, "build_from_blockchain"):
+                    self.world_state_manager.build_from_blockchain(self)
+            except Exception:
+                pass
+        return True

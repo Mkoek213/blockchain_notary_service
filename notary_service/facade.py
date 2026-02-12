@@ -31,6 +31,8 @@ class NotaryService:
         discovery_port: int = 9999,
         target_peers: int = 3,
         max_peers: int = 3,
+        advertise_ip: Optional[str] = None,
+        broadcast_addr: Optional[str] = None,
         crypto_service: Optional[ICryptoService] = None,
     ) -> None:
         self.document_registry = DocumentRegistry()
@@ -66,6 +68,8 @@ class NotaryService:
                 discovery_port=discovery_port,
                 target_peers=target_peers,
                 max_peers=max_peers,
+                advertise_ip=advertise_ip,
+                broadcast_addr=broadcast_addr,
             )
 
     def create_document(self, data: dict) -> NotarialDocument:

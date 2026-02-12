@@ -130,6 +130,12 @@ class Blockchain(IBlockchainInterface):
 
         return self.chain[start_height : end_height + 1]
 
+    def replace_chain(self, blocks: List[Block]) -> bool:
+        if not self._validate_blocks(blocks):
+            return False
+        self.chain = list(blocks)
+        return True
+
     def validate_and_add_block(self, block: Block) -> bool:
         """
         Waliduje i dodaje blok otrzymany z sieci.
@@ -192,6 +198,18 @@ class Blockchain(IBlockchainInterface):
             if current_block.get_parent_hash() != previous_block.get_hash():
                 return False
 
+        return True
+
+    def _validate_blocks(self, blocks: List[Block]) -> bool:
+        if not blocks:
+            return False
+        if not blocks[0].is_genesis_block():
+            return False
+        for i in range(1, len(blocks)):
+            current_block = blocks[i]
+            previous_block = blocks[i - 1]
+            if current_block.get_parent_hash() != previous_block.get_hash():
+                return False
         return True
 
     def to_dict(self) -> List[Dict[str, Any]]:

@@ -36,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--discovery-port", type=int, default=9999)
     parser.add_argument("--target-peers", type=int, default=3)
     parser.add_argument("--max-peers", type=int, default=3)
+    parser.add_argument("--advertise-ip", type=str, default="")
+    parser.add_argument("--broadcast-addr", type=str, default="")
     parser.add_argument("--node-name", type=str, default="ui-node")
     # Przywrócone argumenty dla kompatybilności z Dockerem
     parser.add_argument("--key-path", type=str, default=None)
@@ -470,6 +472,8 @@ def main() -> None:
         # Jeśli zalogowano automatycznie, wstrzyknij adapter
         crypto_service=SecurityModuleAdapter(identity_manager) if auto_login_success else None,
         max_peers=args.max_peers,
+        advertise_ip=args.advertise_ip or None,
+        broadcast_addr=args.broadcast_addr or None,
     )
     
     if args.enable_network:

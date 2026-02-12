@@ -109,6 +109,10 @@ class IBlockchainInterface(ABC):
     def get_blocks_from(self, height: int) -> List[Any]:
         pass
 
+    @abstractmethod
+    def replace_chain(self, blocks: List[Any]) -> bool:
+        pass
+
 
 class IIdentityManager(ABC):
     @abstractmethod

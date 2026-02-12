@@ -29,6 +29,8 @@ class NetworkManager:
         discovery_port: int = 9999,
         target_peers: int = 3,
         max_peers: int = 10,
+        advertise_ip: Optional[str] = None,
+        broadcast_addr: Optional[str] = None,
     ) -> None:
         if identity_manager is None:
             raise ValueError("identity_manager is required")
@@ -54,6 +56,8 @@ class NetworkManager:
             active_peers_provider=self.peer_manager.get_peer_count,
             max_peers=target_peers,
             peer_filter=lambda ip, port: not self.peer_manager.is_known_address(ip, port),
+            advertise_ip=advertise_ip,
+            broadcast_addr=broadcast_addr,
         )
         self._server_socket: Optional[socket.socket] = None
         self._server_thread = threading.Thread(target=self._server_loop, daemon=True)

@@ -22,3 +22,6 @@ class JsonStorageProvider(IStorageProvider):
         if block is None:
             return None
         return cast(Dict[str, Any], block)
+
+    def replace_chain(self, blocks: List[Dict[str, Any]]) -> bool:
+        return self.ledger.replace_chain(blocks)
