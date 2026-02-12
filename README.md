@@ -142,6 +142,20 @@ class P2PNetwork(INetworkModule):
         pass
 ```
 
+## Wzorzec listener w module Network
+
+**Cel:** rozdzielenie transportu od logiki zarządzania peerami.
+
+**Działanie:**
+- `PeerConnection` obsługuje transport TCP, handshake i dekodowanie wiadomości.
+- `PeerManager` dostaje zdarzenia przez listener (`on_message`, `on_disconnect`, `on_handshake_complete`).
+
+**Zalety:**
+- czytelny podział odpowiedzialności,
+- łatwiejsze testowanie,
+- możliwość zmian w logice peerów bez ruszania warstwy transportu,
+- mniejsze ryzyko problemów wątkowych.
+
 ### Security - PKI/X.509
 
 ```python
