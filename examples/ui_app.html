@@ -220,6 +220,23 @@
     </section>
 
     <section class="panel">
+      <h2>Głosowanie (uchwała)</h2>
+      <label>Spółka (ID)</label>
+      <select id="resolution-company"></select>
+      <label>Akcjonariusze</label>
+      <div id="resolution-shareholders"></div>
+      <div class="status" id="resolution-totals"></div>
+      <label>ID uchwały</label>
+      <input id="resolution-id" placeholder="RES-001" />
+      <label>Typ uchwały</label>
+      <input id="resolution-type" placeholder="budget_approval" />
+      <label>Document ID (opcjonalnie)</label>
+      <input id="resolution-doc-id" placeholder="(auto)" />
+      <button id="resolution-btn" class="secondary">Zapisz uchwałę</button>
+      <div class="status" id="resolution-status"></div>
+    </section>
+
+    <section class="panel">
       <h2>Stan systemu</h2>
       <button id="refresh-btn">Odśwież</button>
       <pre id="state-view"></pre>
@@ -364,6 +381,8 @@
         .map((id) => ({ value: id, label: `${id} — ${companies[id].name || ""}`.trim() }));
     }
 
+    let cachedState = null;
+
     function updateSelectors(state) {
       const accountOptions = buildAccountOptions(state);
       const companyOptions = buildCompanyOptions(state);
@@ -374,10 +393,108 @@
       populateSelect(document.getElementById("transfer-buyer"), accountOptions, "— wybierz kupującego —");
       populateSelect(document.getElementById("shares-company"), companyOptions, "— wybierz spółkę —");
       populateSelect(document.getElementById("transfer-company"), companyOptions, "— wybierz spółkę —");
+      populateSelect(document.getElementById("resolution-company"), companyOptions, "— wybierz spółkę —");
 
       const actionOptions = [{ value: "SharesTransfer", label: "Transfer udziałów" }];
       populateSelect(document.getElementById("transfer-action"), actionOptions, "— wybierz akcję —");
       updateTransferFlow();
+    }
+
+    function getShareholders(state, companyId) {
+      if (!state || !companyId) {
+        return [];
+      }
+      const entries = Array.isArray(state.shares) ? state.shares : [];
+      return entries
+        .filter((entry) => String(entry.company_id) === String(companyId))
+        .map((entry) => ({
+          account_id: String(entry.account_id),
+          shares: Number(entry.shares || 0),
+        }))
+        .filter((entry) => entry.shares > 0);
+    }
+
+    function updateResolutionTotals() {
+      const container = document.getElementById("resolution-shareholders");
+      const rows = Array.from(container.querySelectorAll(".shareholder-row"));
+      let votesFor = 0;
+      let votesAgainst = 0;
+      let votesAbstain = 0;
+      for (const row of rows) {
+        const checkbox = row.querySelector("input[type=checkbox]");
+        const select = row.querySelector("select");
+        const shares = Number(row.getAttribute("data-shares")) || 0;
+        if (!checkbox || !select || !checkbox.checked) {
+          continue;
+        }
+        if (select.value === "for") {
+          votesFor += shares;
+        } else if (select.value === "against") {
+          votesAgainst += shares;
+        } else if (select.value === "abstain") {
+          votesAbstain += shares;
+        }
+      }
+      document.getElementById("resolution-totals").textContent = `Suma głosów: ZA=${votesFor}, PRZECIW=${votesAgainst}, WSTRZYMAŁO SIĘ=${votesAbstain}`;
+      return { votesFor, votesAgainst, votesAbstain };
+    }
+
+    function renderShareholders() {
+      const container = document.getElementById("resolution-shareholders");
+      container.innerHTML = "";
+      const companyId = document.getElementById("resolution-company").value;
+      const shareholders = getShareholders(cachedState, companyId);
+      if (!companyId) {
+        container.innerHTML = "<div class=\"status\">Najpierw wybierz spółkę</div>";
+        document.getElementById("resolution-totals").textContent = "";
+        return;
+      }
+      if (!shareholders.length) {
+        container.innerHTML = "<div class=\"status\">Brak akcjonariuszy dla tej spółki</div>";
+        document.getElementById("resolution-totals").textContent = "";
+        return;
+      }
+      for (const shareholder of shareholders) {
+        const row = document.createElement("div");
+        row.className = "shareholder-row";
+        row.setAttribute("data-shares", String(shareholder.shares));
+        row.setAttribute("data-account", shareholder.account_id);
+        row.style.display = "grid";
+        row.style.gridTemplateColumns = "auto 1fr 160px";
+        row.style.gap = "8px";
+        row.style.alignItems = "center";
+        row.style.marginTop = "6px";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+
+        const label = document.createElement("div");
+        label.textContent = `${shareholder.account_id} (${shareholder.shares} udziałów)`;
+
+        const select = document.createElement("select");
+        const optFor = document.createElement("option");
+        optFor.value = "for";
+        optFor.textContent = "ZA";
+        const optAgainst = document.createElement("option");
+        optAgainst.value = "against";
+        optAgainst.textContent = "PRZECIW";
+        const optAbstain = document.createElement("option");
+        optAbstain.value = "abstain";
+        optAbstain.textContent = "WSTRZYMAŁ SIĘ";
+        select.appendChild(optFor);
+        select.appendChild(optAgainst);
+        select.appendChild(optAbstain);
+
+        checkbox.onchange = updateResolutionTotals;
+        select.onchange = updateResolutionTotals;
+
+        row.appendChild(checkbox);
+        row.appendChild(label);
+        row.appendChild(select);
+        container.appendChild(row);
+      }
+      updateResolutionTotals();
     }
 
     async function refresh() {
@@ -395,7 +512,9 @@
       }
 
       document.getElementById("state-view").textContent = JSON.stringify(data, null, 2);
+      cachedState = data.state;
       updateSelectors(data.state);
+      renderShareholders();
       return data;
     }
 
@@ -491,6 +610,48 @@
         return;
       }
       document.getElementById("transfer-status").textContent = "Nieobsługiwana akcja";
+    };
+
+    document.getElementById("resolution-company").onchange = () => {
+      renderShareholders();
+    };
+
+    document.getElementById("resolution-btn").onclick = async () => {
+      const resolution_id = document.getElementById("resolution-id").value;
+      const company_id = document.getElementById("resolution-company").value;
+      const resolution_type = document.getElementById("resolution-type").value;
+      const document_id = document.getElementById("resolution-doc-id").value || null;
+      if (!resolution_id || !company_id || !resolution_type) {
+        document.getElementById("resolution-status").textContent = "Uzupełnij ID, spółkę i typ";
+        return;
+      }
+      const totals = updateResolutionTotals();
+      const voters = [];
+      const rows = Array.from(document.querySelectorAll("#resolution-shareholders .shareholder-row"));
+      for (const row of rows) {
+        const checkbox = row.querySelector("input[type=checkbox]");
+        const select = row.querySelector("select");
+        if (!checkbox || !select || !checkbox.checked) {
+          continue;
+        }
+        const accountId = row.getAttribute("data-account");
+        if (!accountId) {
+          continue;
+        }
+        voters.push({ account_id: accountId, vote: select.value });
+      }
+      const result = await post("/api/resolution", {
+        resolution_id,
+        company_id,
+        resolution_type,
+        votes_for: totals.votesFor,
+        votes_against: totals.votesAgainst,
+        votes_abstain: totals.votesAbstain,
+        voters,
+        document_id,
+      });
+      document.getElementById("resolution-status").textContent = JSON.stringify(result);
+      refresh();
     };
 
     document.getElementById("block-prev").onclick = async () => {

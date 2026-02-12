@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--enable-network", action="store_true")
     parser.add_argument("--p2p-port", type=int, default=8545)
     parser.add_argument("--discovery-port", type=int, default=9999)
+    parser.add_argument("--max-peers", type=int, default=3)
     parser.add_argument("--node-name", type=str, default="ui-node")
     # Przywrócone argumenty dla kompatybilności z Dockerem
     parser.add_argument("--key-path", type=str, default=None)
@@ -364,6 +365,66 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "valid": True, "added": added, "document_id": document_id})
             return
 
+        if self.path == "/api/resolution":
+            required = ["resolution_id", "company_id", "resolution_type", "votes_for", "votes_against"]
+            if not all(k in data for k in required):
+                self._json({"error": "Missing fields"}, status=400)
+                return
+            document_id = data.get("document_id") or str(uuid.uuid4())
+            doc_data = {
+                "type": "Resolution",
+                "document_id": document_id,
+                "resolution_id": data["resolution_id"],
+                "company_id": data["company_id"],
+                "resolution_type": data["resolution_type"],
+                "votes_for": int(data["votes_for"]),
+                "votes_against": int(data["votes_against"]),
+                "votes_abstain": int(data.get("votes_abstain", 0)),
+                "voters": data.get("voters", []),
+                "signatures": [],
+            }
+            is_valid = service.validate_document(doc_data)
+            if not is_valid:
+                self._json({"ok": False, "valid": False, "error": "Validation failed"})
+                return
+            doc = service.create_document(doc_data)
+            block = service.build_block(author=author_dn, documents=[doc], sign=True, private_key="ignored")
+            added = service.add_block(block)
+            if added:
+                service.broadcast_block(block)
+            self._json({"ok": True, "valid": True, "added": added, "document_id": document_id})
+            return
+
+        if self.path == "/api/resolution":
+            required = ["resolution_id", "company_id", "resolution_type", "votes_for", "votes_against"]
+            if not all(k in data for k in required):
+                self._json({"error": "Missing fields"}, status=400)
+                return
+            document_id = data.get("document_id") or str(uuid.uuid4())
+            doc_data = {
+                "type": "Resolution",
+                "document_id": document_id,
+                "resolution_id": data["resolution_id"],
+                "company_id": data["company_id"],
+                "resolution_type": data["resolution_type"],
+                "votes_for": int(data["votes_for"]),
+                "votes_against": int(data["votes_against"]),
+                "votes_abstain": int(data.get("votes_abstain", 0)),
+                "voters": data.get("voters", []),
+                "signatures": [],
+            }
+            is_valid = service.validate_document(doc_data)
+            if not is_valid:
+                self._json({"ok": False, "valid": False, "error": "Validation failed"})
+                return
+            doc = service.create_document(doc_data)
+            block = service.build_block(author="ui-notary", documents=[doc])
+            added = service.add_block(block)
+            if added:
+                service.broadcast_block(block)
+            self._json({"ok": True, "valid": True, "added": added, "document_id": document_id})
+            return
+
         self._json({"error": "Not Found"}, status=404)
 
 
@@ -406,6 +467,7 @@ def main() -> None:
         discovery_port=args.discovery_port,
         # Jeśli zalogowano automatycznie, wstrzyknij adapter
         crypto_service=SecurityModuleAdapter(identity_manager) if auto_login_success else None
+        max_peers=args.max_peers,
     )
     
     if args.enable_network:

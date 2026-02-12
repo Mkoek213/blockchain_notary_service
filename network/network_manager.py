@@ -56,6 +56,7 @@ class NetworkManager:
         self._server_socket: Optional[socket.socket] = None
         self._server_thread = threading.Thread(target=self._server_loop, daemon=True)
         self._discovery_thread = threading.Thread(target=self._discovery_loop, daemon=True)
+        self._sync_thread = threading.Thread(target=self._sync_loop, daemon=True)
         self._stop_event = threading.Event()
 
     def start(self, port: int = 8545) -> None:
@@ -71,6 +72,8 @@ class NetworkManager:
         self.discovery.broadcast_presence()
         if not self._discovery_thread.is_alive():
             self._discovery_thread.start()
+        if not self._sync_thread.is_alive():
+            self._sync_thread.start()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -125,6 +128,14 @@ class NetworkManager:
             except OSError:
                 return
             self.peer_manager.add_incoming_connection(client, address)
+
+    def _sync_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                self.synchronizer.sync_blockchain()
+            except Exception:
+                pass
+            time.sleep(5.0)
 
     def _get_node_id(self, listen_port: int) -> str:
         cert = self.identity_manager.get_self_certificate()

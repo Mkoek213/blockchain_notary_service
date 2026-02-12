@@ -43,7 +43,7 @@ class PeerManager(IConnectionListener):
         self._candidates: Dict[str, Tuple[str, int, float]] = {}
         self._pending_node_ids: set[str] = set()
         self._retry_interval = 2.0
-        self._disconnect_chance = 0.001
+        self._disconnect_chance = 0.0
         self._seen_messages: Dict[str, float] = {}
         self._seen_ttl = 300.0
         self._stop_event = threading.Event()
@@ -69,8 +69,6 @@ class PeerManager(IConnectionListener):
             if node_id == self.local_node_id:
                 return
             if node_id in self.peers or node_id in self._pending_node_ids:
-                return
-            if self.local_node_id and self.local_node_id > node_id:
                 return
         with self._lock:
             if self._is_known_address(ip, port):
@@ -188,6 +186,9 @@ class PeerManager(IConnectionListener):
                 return
             if self.chain.validate_and_add_block(block):
                 self.broadcast_except(msg, sender)
+                return
+            payload = {"from_height": self.chain.get_height()}
+            sender.send(NetworkMessage(type=MessageType.GET_BLOCKS, payload=payload))
             return
         if msg.type == MessageType.GET_BLOCKS:
             from_height = int(msg.payload.get("from_height", 0))
@@ -201,12 +202,16 @@ class PeerManager(IConnectionListener):
 
     def on_disconnect(self, sender: IPeerConnection) -> None:
         with self._lock:
-            if sender.peer_id and sender.peer_id in self.peers:
-                del self.peers[sender.peer_id]
+            if sender.peer_id:
+                current = self.peers.get(sender.peer_id)
+                if current is sender:
+                    del self.peers[sender.peer_id]
             if sender in self.pending_peers:
                 self.pending_peers.remove(sender)
             if sender.peer_id:
                 self._pending_node_ids.discard(sender.peer_id)
+        if sender.peer_id and sender.peer_id in self.peers:
+            return
         if getattr(sender, "remote_endpoint", None) is not None:
             peer_id = sender.peer_id or None
             self.add_candidate(sender.remote_endpoint[0], sender.remote_endpoint[1], peer_id)
