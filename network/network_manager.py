@@ -27,7 +27,8 @@ class NetworkManager:
         identity_manager: Optional["IdentityManager"],
         listen_port: int = 8545,
         discovery_port: int = 9999,
-        max_peers: int = 3,
+        target_peers: int = 3,
+        max_peers: int = 10,
     ) -> None:
         if identity_manager is None:
             raise ValueError("identity_manager is required")
@@ -39,8 +40,9 @@ class NetworkManager:
         self.peer_manager = PeerManager(
             chain,
             identity_manager,
-            max_peers,
-            listen_port,
+            target_peers=target_peers,
+            max_peers=max_peers,
+            local_port=listen_port,
             local_node_id=self._node_id,
         )
         self.synchronizer = BlockSynchronizer(chain, self.peer_manager)
@@ -50,7 +52,7 @@ class NetworkManager:
             listen_port,
             discovery_port,
             active_peers_provider=self.peer_manager.get_peer_count,
-            max_peers=max_peers,
+            max_peers=target_peers,
             peer_filter=lambda ip, port: not self.peer_manager.is_known_address(ip, port),
         )
         self._server_socket: Optional[socket.socket] = None

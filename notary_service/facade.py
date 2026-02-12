@@ -29,6 +29,7 @@ class NotaryService:
         enable_network: bool = False,
         identity_manager: Optional["IdentityManager"] = None,
         discovery_port: int = 9999,
+        target_peers: int = 3,
         max_peers: int = 3,
         crypto_service: Optional[ICryptoService] = None,
     ) -> None:
@@ -63,6 +64,7 @@ class NotaryService:
                 chain=cast(IBlockchainInterface, self.blockchain),
                 identity_manager=identity_manager,
                 discovery_port=discovery_port,
+                target_peers=target_peers,
                 max_peers=max_peers,
             )
 

@@ -16,8 +16,10 @@ services:
         "8545",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8001:8000"
@@ -38,8 +40,10 @@ services:
         "8546",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8002:8000"
@@ -60,8 +64,10 @@ services:
         "8547",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8003:8000"
@@ -82,8 +88,10 @@ services:
         "8548",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8004:8000"
@@ -104,8 +112,10 @@ services:
         "8549",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8005:8000"
@@ -126,8 +136,10 @@ services:
         "8550",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8006:8000"
@@ -148,8 +160,10 @@ services:
         "8551",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8007:8000"
@@ -170,8 +184,10 @@ services:
         "8552",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8008:8000"
@@ -192,8 +208,10 @@ services:
         "8553",
         "--discovery-port",
         "9999",
+        "--target-peers",
+        "5",
         "--max-peers",
-        "3"
+        "15"
       ]
     ports:
       - "8009:8000"

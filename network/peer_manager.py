@@ -25,7 +25,8 @@ class PeerManager(IConnectionListener):
         self,
         chain: IBlockchainInterface,
         identity_manager: Optional["IdentityManager"],
-        max_peers: int = 3,
+        target_peers: int = 3,
+        max_peers: int = 15,
         local_port: int = 0,
         local_node_id: str = "",
     ) -> None:
@@ -33,6 +34,7 @@ class PeerManager(IConnectionListener):
             raise ValueError("identity_manager is required")
         self.chain = chain
         self.identity_manager = identity_manager
+        self.target_peers = target_peers
         self.max_peers = max_peers
         self.local_port = local_port
         self.local_node_id = local_node_id
@@ -82,14 +84,15 @@ class PeerManager(IConnectionListener):
 
     def maintain_connections(self) -> None:
         with self._lock:
-            if len(self.peers) + len(self.pending_peers) >= self.max_peers:
+            if len(self.peers) + len(self.pending_peers) >= self.target_peers:
                 return
         now = time.monotonic()
         with self._lock:
             candidates = list(self._candidates.items())
+        random.shuffle(candidates)
         for node_id, (ip, port, next_attempt) in candidates:
             with self._lock:
-                if len(self.peers) + len(self.pending_peers) >= self.max_peers:
+                if len(self.peers) + len(self.pending_peers) >= self.target_peers:
                     return
             if next_attempt > now:
                 continue
@@ -124,6 +127,11 @@ class PeerManager(IConnectionListener):
         return True
 
     def add_incoming_connection(self, sock: socket.socket, address: Tuple[str, int]) -> None:
+        with self._lock:
+            if len(self.peers) + len(self.pending_peers) >= self.max_peers:
+                logger.warning("rejected incoming %s:%s (max peers reached)", address[0], address[1])
+                sock.close()
+                return
         peer = PeerConnection(
             sock,
             address,
@@ -220,6 +228,11 @@ class PeerManager(IConnectionListener):
 
     def on_handshake_complete(self, sender: IPeerConnection) -> None:
         with self._lock:
+            if sender.peer_id == self.local_node_id:
+                sender.close()
+                if sender in self.pending_peers:
+                    self.pending_peers.remove(sender)
+                return
             if sender.peer_id in self.peers:
                 sender.close()
                 return

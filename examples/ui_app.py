@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--enable-network", action="store_true")
     parser.add_argument("--p2p-port", type=int, default=8545)
     parser.add_argument("--discovery-port", type=int, default=9999)
+    parser.add_argument("--target-peers", type=int, default=3)
     parser.add_argument("--max-peers", type=int, default=3)
     parser.add_argument("--node-name", type=str, default="ui-node")
     # Przywrócone argumenty dla kompatybilności z Dockerem
@@ -465,8 +466,9 @@ def main() -> None:
         enable_network=args.enable_network,
         identity_manager=identity_manager,
         discovery_port=args.discovery_port,
+        target_peers=args.target_peers,
         # Jeśli zalogowano automatycznie, wstrzyknij adapter
-        crypto_service=SecurityModuleAdapter(identity_manager) if auto_login_success else None
+        crypto_service=SecurityModuleAdapter(identity_manager) if auto_login_success else None,
         max_peers=args.max_peers,
     )
     
