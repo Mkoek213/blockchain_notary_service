@@ -13,6 +13,8 @@
       --accent: #0f4c5c;
       --accent-2: #d9a441;
       --border: #e2dfd7;
+      --error: #d32f2f;
+      --success: #388e3c;
     }
     * { box-sizing: border-box; }
     body {
@@ -30,9 +32,14 @@
       position: sticky;
       top: 0;
       z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     header h1 { margin: 0; font-size: 24px; letter-spacing: 0.5px; }
     header p { margin: 4px 0 0; color: var(--muted); }
+    #node-info { font-size: 14px; color: var(--accent); font-weight: bold; }
+    
     main {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -52,8 +59,7 @@
       color: var(--accent);
     }
     label { display: block; font-size: 12px; color: var(--muted); margin-top: 8px; }
-    input,
-    select {
+    input, select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--border);
@@ -61,10 +67,7 @@
       margin-top: 4px;
       font-size: 14px;
     }
-    select:disabled {
-      background: #f0efeb;
-      color: var(--muted);
-    }
+    select:disabled { background: #f0efeb; color: var(--muted); }
     button {
       margin-top: 12px;
       padding: 10px 12px;
@@ -74,8 +77,11 @@
       border-radius: 8px;
       cursor: pointer;
       font-weight: 600;
+      width: 100%;
     }
     button.secondary { background: var(--accent-2); color: #2b1f00; }
+    button.outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+    
     pre {
       background: #f7f7f5;
       border: 1px solid var(--border);
@@ -86,15 +92,76 @@
       max-height: 420px;
     }
     .status { margin-top: 8px; color: var(--muted); font-size: 12px; }
+    .error-msg { color: var(--error); margin-top: 8px; font-size: 13px; }
+    
+    /* AUTH OVERLAY */
+    #auth-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.95);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .auth-box {
+      background: var(--panel);
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+      width: 400px;
+      max-width: 90%;
+      text-align: center;
+    }
+    .auth-box h2 { color: var(--accent); margin-top: 0; }
+    .hidden { display: none !important; }
+    
     @media (max-width: 920px) {
       main { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
+
+  <!-- AUTH SCREEN -->
+  <div id="auth-overlay">
+    <div class="auth-box" id="login-form">
+      <h2>Logowanie do Węzła</h2>
+      <p>Wprowadź hasło do klucza prywatnego, aby odblokować węzeł.</p>
+      
+      <label style="text-align: left">Hasło</label>
+      <input type="password" id="login-password" />
+      <button id="btn-login">Zaloguj się</button>
+      <div id="login-error" class="error-msg"></div>
+      
+      <hr style="margin: 24px 0; border: 0; border-top: 1px solid var(--border);" />
+      <p style="font-size: 13px; color: var(--muted)">Nie masz jeszcze tożsamości?</p>
+      <button class="outline" onclick="showRegister()">Zarejestruj Nowy Węzeł</button>
+    </div>
+
+    <div class="auth-box hidden" id="register-form">
+      <h2>Rejestracja Węzła</h2>
+      <p>Wygeneruj nową tożsamość podpisaną przez Izbę.</p>
+      
+      <label style="text-align: left">Nazwa Kancelarii</label>
+      <input type="text" id="reg-name" placeholder="Kancelaria..." />
+      
+      <label style="text-align: left">Hasło do klucza</label>
+      <input type="password" id="reg-password" />
+      
+      <button id="btn-register">Zarejestruj się</button>
+      <div id="reg-error" class="error-msg"></div>
+      
+      <button class="outline" style="margin-top: 12px" onclick="showLogin()">Wróć do logowania</button>
+    </div>
+  </div>
+
   <header>
-    <h1>Notary Service UI</h1>
-    <p>Prosta aplikacja UI do testowania integracji modułów</p>
+    <div>
+      <h1>Notary Service UI</h1>
+      <p>Prosta aplikacja UI do testowania integracji modułów</p>
+    </div>
+    <div id="node-info"></div>
   </header>
 
   <main>
@@ -172,6 +239,73 @@
   </main>
 
   <script>
+    // --- AUTH LOGIC ---
+    function showRegister() {
+      document.getElementById("login-form").classList.add("hidden");
+      document.getElementById("register-form").classList.remove("hidden");
+    }
+    
+    function showLogin() {
+      document.getElementById("register-form").classList.add("hidden");
+      document.getElementById("login-form").classList.remove("hidden");
+    }
+
+    async function checkAuthStatus() {
+       try {
+         const res = await fetch("/api/auth-status");
+         const data = await res.json();
+         if (data.logged_in) {
+           document.getElementById("auth-overlay").classList.add("hidden");
+           refresh(); // Load app data
+         } else {
+           // Jeśli nie jest zalogowany, sprawdź czy zarejestrowany
+           if (!data.registered) {
+             showRegister(); // Pokaż ekran rejestracji domyślnie
+           } else {
+             showLogin(); // Pokaż ekran logowania
+           }
+         }
+       } catch (e) {
+         console.error("Auth check failed", e);
+       }
+    }
+
+    document.getElementById("btn-register").onclick = async () => {
+      const name = document.getElementById("reg-name").value;
+      const password = document.getElementById("reg-password").value;
+      const errorDiv = document.getElementById("reg-error");
+      errorDiv.textContent = "";
+      
+      if(!name || !password) {
+        errorDiv.textContent = "Wypełnij wszystkie pola.";
+        return;
+      }
+
+      const res = await post("/api/register", { name, password });
+      if (res.ok) {
+        alert("Rejestracja pomyślna! Możesz się teraz zalogować.");
+        showLogin();
+      } else {
+        errorDiv.textContent = res.error || "Błąd rejestracji.";
+      }
+    };
+
+    document.getElementById("btn-login").onclick = async () => {
+      const password = document.getElementById("login-password").value;
+      const errorDiv = document.getElementById("login-error");
+      errorDiv.textContent = "";
+
+      const res = await post("/api/login", { password });
+      if (res.ok) {
+        document.getElementById("auth-overlay").classList.add("hidden");
+        refresh();
+      } else {
+        errorDiv.textContent = res.error || "Błędne hasło.";
+      }
+    };
+
+    // --- APP LOGIC ---
+
     async function post(path, payload) {
       const res = await fetch(path, {
         method: "POST",
@@ -249,6 +383,17 @@
     async function refresh() {
       const res = await fetch("/api/state");
       const data = await res.json();
+      
+      // Obsługa wylogowania sesji
+      if (data.auth === false) {
+         document.getElementById("auth-overlay").classList.remove("hidden");
+         return;
+      }
+      
+      if(data.node_dn) {
+        document.getElementById("node-info").textContent = "Zalogowano jako: " + data.node_dn;
+      }
+
       document.getElementById("state-view").textContent = JSON.stringify(data, null, 2);
       updateSelectors(data.state);
       return data;
@@ -317,14 +462,8 @@
       transferFields.style.display = transferAction.value === "SharesTransfer" ? "block" : "none";
     }
 
-    transferSeller.onchange = () => {
-      updateTransferFlow();
-    };
-
-    transferBuyer.onchange = () => {
-      updateTransferFlow();
-    };
-
+    transferSeller.onchange = () => { updateTransferFlow(); };
+    transferBuyer.onchange = () => { updateTransferFlow(); };
     transferAction.onchange = () => {
       transferFields.style.display = transferAction.value === "SharesTransfer" ? "block" : "none";
     };
@@ -371,8 +510,10 @@
     };
 
     document.getElementById("refresh-btn").onclick = refresh;
-    refresh();
-    loadBlock(0);
+    
+    // START
+    checkAuthStatus();
+    // refresh() i loadBlock() będą wywołane wewnątrz checkAuthStatus jeśli zalogowany
   </script>
 </body>
 </html>

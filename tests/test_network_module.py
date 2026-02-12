@@ -45,6 +45,12 @@ class StubChain:
 class StubPeer:
     remote_height: int
     sent: List[NetworkMessage]
+    peer_id: str = "stub-peer"
+
+    def send(self, msg: NetworkMessage) -> None:
+        self.sent.append(msg)
+
+
 class DummyIdentityManager:
     def get_self_certificate(self) -> Any:
         return None
@@ -57,10 +63,6 @@ class DummyIdentityManager:
 
     def verify_peer_signature(self, data: bytes, signature: bytes, cert: Any) -> bool:
         return False
-
-
-    def send(self, msg: NetworkMessage) -> None:
-        self.sent.append(msg)
 
 
 def build_block_dict() -> Dict[str, Any]:
@@ -132,6 +134,7 @@ def test_peer_manager_handles_get_blocks() -> None:
     manager = PeerManager(chain, DummyIdentityManager())
 
     class Sender:
+        peer_id = "test-sender"
         def __init__(self) -> None:
             self.sent: List[NetworkMessage] = []
 
@@ -150,11 +153,19 @@ def test_peer_manager_handles_get_blocks() -> None:
 def test_peer_manager_handles_transaction_and_block() -> None:
     chain = StubChain()
     manager = PeerManager(chain, DummyIdentityManager())
+    
+    class Sender:
+        peer_id = "test-sender"
+        def __init__(self) -> None:
+            self.sent: List[NetworkMessage] = []
+        def send(self, msg: NetworkMessage) -> None: pass
+
+    sender = Sender()
     tx_msg = NetworkMessage(type=MessageType.TRANSACTION, payload={"id": "tx1"})
-    manager.on_message(tx_msg, manager)
+    manager.on_message(tx_msg, sender)
     assert chain.received_transactions == [{"id": "tx1"}]
 
     block_data = build_block_dict()
     block_msg = NetworkMessage(type=MessageType.BLOCK, payload=block_data)
-    manager.on_message(block_msg, manager)
+    manager.on_message(block_msg, sender)
     assert chain.received_blocks

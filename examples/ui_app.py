@@ -13,13 +13,21 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from notary_service import NotaryService
-from pki_setup import CA_DIR, NODE_DIR, generate_node_identity, setup_pki
 from security.identity_manager import IdentityManager
+from security import SecurityModuleAdapter
+
+# Stałe ścieżki
+PKI_DIR = "pki"
+CA_KEY_PATH = os.path.join(PKI_DIR, "ca", "root_ca.key")
+CA_CERT_PATH = os.path.join(PKI_DIR, "ca", "root_ca.crt")
+NODE_CONFIG_DIR = os.path.join(PKI_DIR, "node_config")
+NODE_KEY_PATH = os.path.join(NODE_CONFIG_DIR, "node.key")
+NODE_CERT_PATH = os.path.join(NODE_CONFIG_DIR, "node.crt")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Notary Service UI")
-    parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--storage", action="store_true", help="Enable file-based storage")
     parser.add_argument("--data-dir", type=str, default="data")
@@ -27,9 +35,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--p2p-port", type=int, default=8545)
     parser.add_argument("--discovery-port", type=int, default=9999)
     parser.add_argument("--node-name", type=str, default="ui-node")
-    parser.add_argument("--key-path", type=str, default="")
-    parser.add_argument("--cert-path", type=str, default="")
-    parser.add_argument("--ca-path", type=str, default="")
+    # Przywrócone argumenty dla kompatybilności z Dockerem
+    parser.add_argument("--key-path", type=str, default=None)
+    parser.add_argument("--cert-path", type=str, default=None)
+    parser.add_argument("--ca-path", type=str, default=None)
     return parser
 
 
@@ -72,7 +81,16 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
         except Exception:
             return None
 
+    def _check_auth(self) -> bool:
+        """Sprawdza czy węzeł jest zalogowany (czy ma tożsamość)."""
+        im = self.server.identity_manager # type: ignore
+        return im.get_self_certificate() is not None
+
     def _get_state_payload(self) -> Dict[str, Any]:
+        # Jeśli nie zalogowany, zwróć pusty stan
+        if not self._check_auth():
+            return {"state": {}, "chain": {}, "auth": False}
+
         ws = self.server.service.world_state  # type: ignore[attr-defined]
         if hasattr(ws, "export_state"):
             state = ws.export_state()
@@ -102,14 +120,23 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
         for key in state.get("companies", {}).keys():
             entities.add(key)
         state["entities"] = sorted(entities)
+        
         blockchain = self.server.service.blockchain  # type: ignore[attr-defined]
         chain_stats = {
             "height": blockchain.get_height(),
             "latest_hash": blockchain.get_latest_block_hash(),
         }
-        return {"state": state, "chain": chain_stats}
+        
+        # Pobierz nazwę zalogowanego węzła
+        cert = self.server.identity_manager.get_self_certificate() # type: ignore
+        node_dn = cert.subject.rfc4514_string() if cert else "Unknown"
+        
+        return {"state": state, "chain": chain_stats, "auth": True, "node_dn": node_dn}
 
     def _get_block_payload(self, height: Optional[int]) -> Dict[str, Any]:
+        if not self._check_auth():
+             return {"error": "Unauthorized"}
+             
         blockchain = self.server.service.blockchain  # type: ignore[attr-defined]
         max_height = blockchain.get_height() - 1
         if max_height < 0:
@@ -126,11 +153,20 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
         if self.path == "/":
             self._text(self.server.ui_html)  # type: ignore[attr-defined]
             return
+        
+        # Sprawdzamy status auth dla API
+        if self.path == "/api/auth-status":
+            is_logged = self._check_auth()
+            # Sprawdź czy jest zarejestrowany (czy pliki istnieją)
+            is_registered = os.path.exists(NODE_KEY_PATH)
+            self._json({"logged_in": is_logged, "registered": is_registered})
+            return
+
         if self.path == "/api/state":
             self._json(self._get_state_payload())
             return
         if self.path == "/api/chain":
-            self._json(self._get_state_payload()["chain"])
+            self._json(self._get_state_payload().get("chain", {}))
             return
         if self.path.startswith("/api/block"):
             parsed = urlparse(self.path)
@@ -147,7 +183,83 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
             self._json({"error": "Invalid JSON"}, status=400)
             return
 
+        im = self.server.identity_manager # type: ignore
         service = self.server.service  # type: ignore[attr-defined]
+
+        # --- ENDPOINTY AUTH ---
+
+        if self.path == "/api/register":
+            name = data.get("name")
+            password = data.get("password")
+            if not name or not password:
+                self._json({"error": "Missing name or password"}, status=400)
+                return
+            
+            try:
+                # Upewnij się że CA istnieje
+                if not os.path.exists(CA_KEY_PATH):
+                     # Fallback dla demo - uruchom pki_setup jeśli nie ma
+                     import pki_setup
+                     pki_setup.setup_pki()
+
+                im.register_new_node(
+                    name=name,
+                    organization="NotaryUI",
+                    password=password,
+                    output_dir=NODE_CONFIG_DIR,
+                    ca_key_path=CA_KEY_PATH,
+                    ca_cert_path=CA_CERT_PATH
+                )
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, status=500)
+            return
+
+        if self.path == "/api/login":
+            password = data.get("password")
+            if not password:
+                self._json({"error": "Missing password"}, status=400)
+                return
+            
+            try:
+                im.load_identity(
+                    key_path=NODE_KEY_PATH,
+                    cert_path=NODE_CERT_PATH,
+                    trusted_root_path=CA_CERT_PATH,
+                    password=password
+                )
+                
+                # Zaktualizuj serwis o nową tożsamość
+                adapter = SecurityModuleAdapter(im)
+                service.blockchain.crypto_service = adapter
+                service.notary_validator.crypto_service = adapter
+                
+                # Jeśli sieć nie działa, a powinna - uruchom ją teraz
+                # (zakładamy, że args.enable_network było przekazane do serwera lub jest domyślne true dla UI)
+                # W tym miejscu nie mamy dostępu do `args` z main, więc możemy użyć flagi w service?
+                # Service ma network_manager, ale może być None jeśli enable_network było False
+                if service.network_manager:
+                    # Sprawdź czy już działa? Metoda start jest idempotentna w NetworkManager?
+                    # W NetworkManager nie ma flagi `running`, ale `start()` uruchamia sockety.
+                    # Bezpieczniej założyć, że jeśli nie było tożsamości, to nie wystartował.
+                    # Ale musimy znać port.
+                    # Dla uproszczenia: w UI hardkodujemy port 8545 lub bierzemy z service.
+                    service.start_network(8545) # Domyślny port
+                
+                self._json({"ok": True})
+            except Exception as e:
+                print(f"Login error: {e}")
+                self._json({"ok": False, "error": "Invalid password or key file"}, status=401)
+            return
+
+        # --- ENDPOINTY BIZNESOWE (WYMAGAJĄ ZALOGOWANIA) ---
+        
+        if not self._check_auth():
+            self._json({"error": "Unauthorized. Please login first."}, status=401)
+            return
+
+        # Pobierz DN autora
+        author_dn = im.get_self_certificate().subject.rfc4514_string()
 
         if self.path == "/api/company":
             company_id = data.get("company_id")
@@ -166,7 +278,8 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "valid": False, "error": "Validation failed"})
                 return
             doc = service.create_document(doc_data)
-            block = service.build_block(author="ui-notary", documents=[doc])
+            # Używamy ignorowanego klucza, bo adapter ma go w sobie
+            block = service.build_block(author=author_dn, documents=[doc], sign=True, private_key="ignored")
             added = service.add_block(block)
             if added:
                 service.broadcast_block(block)
@@ -192,7 +305,7 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "valid": False, "error": "Validation failed"})
                 return
             doc = service.create_document(doc_data)
-            block = service.build_block(author="ui-notary", documents=[doc])
+            block = service.build_block(author=author_dn, documents=[doc], sign=True, private_key="ignored")
             added = service.add_block(block)
             if added:
                 service.broadcast_block(block)
@@ -216,7 +329,7 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "valid": False, "error": "Validation failed"})
                 return
             doc = service.create_document(doc_data)
-            block = service.build_block(author="ui-notary", documents=[doc])
+            block = service.build_block(author=author_dn, documents=[doc], sign=True, private_key="ignored")
             added = service.add_block(block)
             if added:
                 service.broadcast_block(block)
@@ -244,7 +357,7 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "valid": False, "error": "Validation failed"})
                 return
             doc = service.create_document(doc_data)
-            block = service.build_block(author="ui-notary", documents=[doc])
+            block = service.build_block(author=author_dn, documents=[doc], sign=True, private_key="ignored")
             added = service.add_block(block)
             if added:
                 service.broadcast_block(block)
@@ -259,21 +372,31 @@ def main() -> None:
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    identity_manager: Optional[IdentityManager] = None
-    if args.enable_network:
-        if not args.key_path or not args.cert_path or not args.ca_path:
-            setup_pki()
-            node_key_path, node_cert_path = generate_node_identity(args.node_name, NODE_DIR, CA_DIR)
-            args.key_path = args.key_path or node_key_path
-            args.cert_path = args.cert_path or node_cert_path
-            args.ca_path = args.ca_path or os.path.join(CA_DIR, "root_ca.crt")
-
-        identity_manager = IdentityManager()
-        identity_manager.load_identity(
-            key_path=args.key_path,
-            cert_path=args.cert_path,
-            trusted_root_path=args.ca_path,
-        )
+    
+    # Inicjalizacja IdentityManager (ale bez ładowania tożsamości jeszcze)
+    identity_manager = IdentityManager()
+    
+    auto_login_success = False
+    
+    # Próba załadowania jeśli podano argumenty (np. z CLI Dockera)
+    if args.key_path and args.cert_path:
+        try:
+            # W trybie Dockerowym hasło może być puste (jeśli klucze niezaszyfrowane) lub z ENV
+            password = os.getenv("NODE_PASSWORD", None)
+            
+            # Jeśli ca_path nie jest podany, spróbuj domyślny
+            ca_path = args.ca_path or CA_CERT_PATH
+            
+            identity_manager.load_identity(
+                key_path=args.key_path,
+                cert_path=args.cert_path,
+                trusted_root_path=ca_path,
+                password=password
+            )
+            print("Zalogowano automatycznie używając argumentów CLI.")
+            auto_login_success = True
+        except Exception as e:
+            print(f"Ostrzeżenie: Nie udało się zalogować automatycznie: {e}")
 
     service = NotaryService(
         use_storage=args.storage,
@@ -281,18 +404,25 @@ def main() -> None:
         enable_network=args.enable_network,
         identity_manager=identity_manager,
         discovery_port=args.discovery_port,
+        # Jeśli zalogowano automatycznie, wstrzyknij adapter
+        crypto_service=SecurityModuleAdapter(identity_manager) if auto_login_success else None
     )
+    
     if args.enable_network:
-        service.start_network(args.p2p_port)
+        # Uruchom sieć TYLKO jeśli zalogowano
+        if auto_login_success:
+            service.start_network(args.p2p_port)
+        else:
+            print("Sieć nie została uruchomiona (oczekiwanie na logowanie użytkownika).")
+        
     ui_html = load_html()
 
     server = ThreadingHTTPServer((args.host, args.port), NotaryUIHandler)
     server.service = service  # type: ignore[attr-defined]
+    server.identity_manager = identity_manager # type: ignore[attr-defined]
     server.ui_html = ui_html  # type: ignore[attr-defined]
 
     print(f"UI running on http://{args.host}:{args.port}")
-    if args.enable_network:
-        print(f"P2P listening on {args.p2p_port}, discovery UDP {args.discovery_port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

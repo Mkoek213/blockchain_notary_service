@@ -37,3 +37,7 @@ Thumbs.db
 
 # Project specific
 blockchain_export.json
+.env
+
+# PKI
+pki/
