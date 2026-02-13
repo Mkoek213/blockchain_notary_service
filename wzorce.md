@@ -251,3 +251,67 @@ class FinancialActionProvider(DocumentProvider):
             
         raise ValueError(f"Unknown type: {doc_type}")
 ```
+
+---
+
+# Wzorce Projektowe w Module Network
+
+## Listener (Observer)
+
+**Pliki:** `network/peer_connection.py`, `network/peer_manager.py`
+
+### Dlaczego ten wzorzec został użyty?
+Połączenie sieciowe działa w osobnych wątkach (odbiór i wysyłka). `PeerConnection` nie powinien znać logiki zarządzania peerami, synchronizacji ani routingu wiadomości. Zamiast tego sygnalizuje zdarzenia przez interfejs `IConnectionListener`, a implementacja (`PeerManager`) decyduje co dalej. To klasyczny Listener/Observer: źródło zdarzeń (connection) informuje obserwatora (manager) o zmianach stanu i wiadomościach.
+
+### Zalety
+- **Luźne powiązanie:** `PeerConnection` nie zna szczegółów logiki biznesowej ani topologii sieci.
+- **Testowalność:** Można podmienić listenera np. w testach lub dodać loggera/monitoring.
+- **Czytelny przepływ zdarzeń:** handshake, wiadomość, rozłączenie są obsługiwane w jednym miejscu.
+
+### Wady
+- **Trudniejsze debugowanie:** Zdarzenia są przekazywane asynchronicznie między wątkami.
+
+### Przykład kodu
+
+```python
+# network/peer_connection.py
+class IConnectionListener(Protocol):
+    def on_message(self, msg: NetworkMessage, sender: "IPeerConnection") -> None:
+        ...
+
+    def on_disconnect(self, sender: "IPeerConnection") -> None:
+        ...
+
+    def on_handshake_complete(self, sender: "IPeerConnection") -> None:
+        ...
+
+
+class PeerConnection(IPeerConnection):
+    def __init__(..., listener: IConnectionListener, ...):
+        self.listener = listener
+        ...
+
+    def _listen_loop(self) -> None:
+        ...
+        self.listener.on_message(msg, self)
+
+    def _handle_handshake(self, msg: NetworkMessage) -> None:
+        ...
+        self.listener.on_handshake_complete(self)
+```
+
+```python
+# network/peer_manager.py
+class PeerManager(IConnectionListener):
+    def on_message(self, msg: NetworkMessage, sender: IPeerConnection) -> None:
+        # routing, synchronizacja, gossip
+        ...
+
+    def on_disconnect(self, sender: IPeerConnection) -> None:
+        # cleanup i reconnect
+        ...
+
+    def on_handshake_complete(self, sender: IPeerConnection) -> None:
+        # rejestracja peera, sync, wysłanie listy
+        ...
+```
