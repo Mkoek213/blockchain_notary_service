@@ -135,3 +135,119 @@ class JsonStorageProvider(IStorageProvider):
         self._save_data(chain)
         return True
 ```
+
+---
+
+# Wzorce Projektowe w Module Blockchain Core
+
+## Budowniczy (Builder)
+
+**Plik:** `blockchain_core/block_builder.py`
+
+### Dlaczego ten wzorzec został użyty?
+Obiekt `Block` w systemie Proof of Authority jest skomplikowany. Posiada wiele pól konfiguracyjnych (`parentHash`, `timestamp`, `miner`, `documents`), które muszą być ustawione w odpowiedniej kolejności i zweryfikowane przed utworzeniem obiektu. Ponadto, obiekt `Block` jest niemodyfikowalny (immutable) - raz stworzony nie powinien być zmieniany (hash musi pozostać stały). Użycie konstruktora z 10 parametrami byłoby nieczytelne i podatne na błędy (tzw. "telescoping constructor"). Wzorzec Builder pozwala na czytelne, krokowe konstruowanie obiektu.
+
+### Zalety
+- **Czytelny kod klienta:** Zamiast `new Block(hash, prev, time, miner, ...)` mamy `builder.set_parent_hash(...).set_author(...)`.
+- **Niemodyfikowalność produktu:** Klasa `Block` nie posiada setterów. Jest inicjalizowana tylko raz przez Buildera, co gwarantuje spójność hasha.
+- **Weryfikacja spójności:** Metoda `build()` sprawdza, czy wszystkie wymagane pola zostały ustawione i automatycznie wylicza skróty kryptograficzne (`transactions_root`), zwalniając z tego klienta.
+
+### Wady
+- **Konieczność tworzenia dodatkowej klasy:** Wymaga napisania osobnej klasy `BlockBuilder`, która duplikuje część pól klasy `Block`.
+
+### Przykład kodu
+
+```python
+class BlockBuilder:
+    """
+    Builder dla klasy Block.
+    Umożliwia stopniowe budowanie bloku z walidacją parametrów.
+    """
+
+    def __init__(self):
+        self._parent_hash = None
+        self._documents = []
+        # ... inne pola domyślne ...
+
+    def set_parent_hash(self, hash: str) -> "BlockBuilder":
+        self._parent_hash = hash
+        return self  # Method chaining
+
+    def add_document(self, doc: NotarialDocument) -> "BlockBuilder":
+        self._documents.append(doc)
+        return self
+
+    def build(self, crypto_service=None, private_key=None) -> Block:
+        # 1. Walidacja
+        if self._parent_hash is None:
+            raise ValueError("Parent hash required")
+        
+        # 2. Obliczenia automatyczne (np. Merkle Root)
+        self._calculate_roots()
+
+        # 3. Utworzenie obiektu
+        block = Block(self)
+
+        # 4. Opcjonalne podpisanie
+        if crypto_service:
+            block.sign_block(private_key, crypto_service)
+            
+        return block
+```
+
+---
+
+# Wzorce Projektowe w Module Business Logic
+
+## Metoda Wytwórcza (Factory Method)
+
+**Plik:** `business_logic/document_providers.py`
+
+### Dlaczego ten wzorzec został użyty?
+System obsługuje różne typy dokumentów notarialnych (np. `SharesTransfer`, `Dividend`, `Resolution`), które różnią się strukturą danych i regułami walidacji. Zamiast tworzyć jeden wielki blok warunkowy (`if/else` lub `switch`) decydujący o tym, jaką klasę utworzyć, zastosowano wzorzec Metody Wytwórczej. Abstrakcyjna klasa `DocumentProvider` definiuje interfejs tworzenia, a konkretne podklasy (`FinancialActionProvider`, `GovernanceActionProvider`) implementują logikę dla specyficznych grup dokumentów.
+
+### Zalety
+- **Zasada Open/Closed:** Dodanie nowego typu dokumentu (np. `RealEstateTransfer`) wymaga jedynie dodania nowego providera, bez modyfikacji istniejącego kodu.
+- **Zasada Pojedynczej Odpowiedzialności (SRP):** Logika walidacji i tworzenia obiektów jest odseparowana od reszty systemu i zgrupowana tematycznie.
+- **Enkapsulacja:** Klient systemu nie musi znać szczegółów konstrukcji poszczególnych klas dokumentów.
+
+### Wady
+- **Zwiększona liczba klas:** Dla każdej rodziny dokumentów potrzebna jest osobna klasa providera.
+
+### Przykład kodu
+
+```python
+class DocumentProvider(ABC):
+    """
+    Abstrakcyjny Twórca (Creator).
+    Definiuje metodę wytwórczą _create oraz publiczne API create_document.
+    """
+    
+    def create_document(self, document_data: Dict[str, Any]) -> NotarialDocument:
+        # Wspólna logika (np. wstępna walidacja)
+        if not self.validate_document_data(document_data):
+            raise ValueError("Invalid data")
+            
+        # Wywołanie metody wytwórczej
+        return self._create(document_data)
+
+    @abstractmethod
+    def _create(self, document_data: Dict[str, Any]) -> NotarialDocument:
+        """Metoda wytwórcza implementowana przez podklasy."""
+        pass
+
+class FinancialActionProvider(DocumentProvider):
+    """
+    Konkretny Twórca (Concrete Creator) dla operacji finansowych.
+    """
+    
+    def _create(self, document_data: Dict[str, Any]) -> NotarialDocument:
+        doc_type = document_data["type"]
+        
+        if doc_type == "SharesTransfer":
+            return SharesTransfer(...) # Tworzenie konkretnego produktu
+        elif doc_type == "Dividend":
+            return Dividend(...)
+            
+        raise ValueError(f"Unknown type: {doc_type}")
+```
