@@ -102,15 +102,101 @@ event_bus.publish(EventType.BLOCK_ADDED, {"block": block})
 
 ## 👥 Dla zespołów implementujących moduły
 
-### Business Logic - Factory Pattern
+### Business Logic - Wzorzec Factory Method (Metoda Wytwórcza)
+
+Moduł `business_logic` wykorzystuje wzorzec **Factory Method** do tworzenia dokumentów notarialnych.
+Wzorzec eliminuje centralne struktury `switch-case` — każdy typ dokumentu ma swojego wyspecjalizowanego dostawcę.
+
+#### Struktura klas
+
+```
+DocumentProvider (abstrakcja — Creator)
+├── FinancialActionProvider     → tworzy: SharesTransfer, Dividend
+└── GovernanceActionProvider    → tworzy: Resolution
+```
+
+- **`DocumentProvider`** — abstrakcyjna klasa bazowa definiująca interfejs metody wytwórczej:
+  - `get_supported_types()` — lista obsługiwanych typów
+  - `create_document(data)` — walidacja + delegacja do `_create()`
+  - `_create(data)` — metoda wytwórcza (implementowana w podklasach)
+  - `validate_document_data(data)` — weryfikacja danych wejściowych
+
+- **`FinancialActionProvider`** — obsługuje operacje kapitałowe (`SharesTransfer`, `Dividend`)
+- **`GovernanceActionProvider`** — obsługuje decyzje zarządcze (`Resolution`)
+
+#### Jak tworzyć dokumenty (przez `DocumentRegistry`)
+
+`DocumentRegistry` jest routerem, który iteruje po zarejestrowanych providerach — **bez switch-case**:
 
 ```python
-from blockchain_core import IDocumentFactory, NotarialDocument
+from notary_service import DocumentRegistry
 
-class SharesTransferFactory(IDocumentFactory):
-    def create_document(self, data: dict) -> NotarialDocument:
-        # Twoja implementacja fabryki dokumentów
-        return SharesTransfer(**data)
+registry = DocumentRegistry()  # domyślnie: Financial + Governance
+
+# Tworzenie transferu udziałów (obsłuży FinancialActionProvider)
+transfer = registry.create_document({
+    "type": "SharesTransfer",
+    "seller": "Jan Kowalski",
+    "buyer": "Anna Nowak",
+    "company_id": "COMP-001",
+    "shares_count": 100,
+    "price_per_share": 50.0,
+})
+
+# Tworzenie uchwały (obsłuży GovernanceActionProvider)
+resolution = registry.create_document({
+    "type": "Resolution",
+    "resolution_id": "RES-2025-001",
+    "company_id": "COMP-001",
+    "resolution_type": "dividend_approval",
+    "votes_for": 75,
+    "votes_against": 25,
+})
+```
+
+#### Jak dodać nowy typ dokumentu (Open/Closed Principle)
+
+Aby dodać nowy typ czynności notarialnej, wystarczy stworzyć nowy provider — **bez modyfikacji istniejącego kodu**:
+
+```python
+from business_logic.document_providers import DocumentProvider
+
+class InsuranceActionProvider(DocumentProvider):
+    """Nowy provider dla dokumentów ubezpieczeniowych."""
+
+    def get_supported_types(self) -> list:
+        return ["InsurancePolicy"]
+
+    def validate_document_data(self, document_data):
+        required = ["policy_id", "insured_party", "premium"]
+        return all(f in document_data for f in required)
+
+    def _create(self, document_data):
+        return InsurancePolicy(**document_data)
+
+# Rejestracja razem z istniejącymi providerami:
+registry = DocumentRegistry(providers=[
+    FinancialActionProvider(),
+    GovernanceActionProvider(),
+    InsuranceActionProvider(),  # nowy provider
+])
+```
+
+#### Przepływ tworzenia dokumentu
+
+```
+Klient (np. UI)
+    │
+    ▼
+DocumentRegistry.create_document(data)
+    │
+    ├── FinancialActionProvider.get_supported_types() → ["SharesTransfer", "Dividend"]
+    │       └── (jeśli pasuje) → validate → _create() → SharesTransfer / Dividend
+    │
+    ├── GovernanceActionProvider.get_supported_types() → ["Resolution"]
+    │       └── (jeśli pasuje) → validate → _create() → Resolution
+    │
+    └── (żaden provider?) → GenericNotarialDocument (fallback)
 ```
 
 ### Business Logic - Walidacja

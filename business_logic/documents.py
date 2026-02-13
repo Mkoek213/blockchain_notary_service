@@ -169,3 +169,4 @@ class Dividend(NotarialDocument):
             "record_date": self.record_date,
             "signatures": self._signatures,
         }
+

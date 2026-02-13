@@ -52,8 +52,6 @@ class DocumentProvider(IDocumentFactory):
         Returns:
             Instancja NotarialDocument
 
-        Raises:
-            ValueError: Jeśli dane są niepoprawne lub typ nieobsługiwany
         """
         if not self.validate_document_data(document_data):
             raise ValueError(
@@ -206,7 +204,7 @@ class GovernanceActionProvider(DocumentProvider):
     Dostawca dokumentów dla decyzji zarządczych (Factory Method).
 
     Obsługuje:
-    - Resolution: uchwały i wyniki głosowań
+    - Resolution: wyniki głosowań
     """
 
     def get_supported_types(self) -> list:

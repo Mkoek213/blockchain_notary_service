@@ -2,10 +2,12 @@ import json
 from typing import Any, Dict, List, Optional
 
 from blockchain_core.block_builder import Block, BlockBuilder
-from blockchain_core.notarial_document import NotarialDocument, Transaction, VotingResult
+from blockchain_core.notarial_document import NotarialDocument
 
 
 class GenericNotarialDocument(NotarialDocument):
+    """Uniwersalny dokument notarialny zachowujący pełne dane JSON."""
+
     def __init__(self, data: Dict[str, Any]):
         self._data = data
 
@@ -18,17 +20,11 @@ class GenericNotarialDocument(NotarialDocument):
 
 
 def document_from_dict(data: Dict[str, Any]) -> NotarialDocument:
-    doc_type = data.get("type")
-    if doc_type == "Transaction":
-        tx = Transaction(sender=data["sender"], recipient=data["recipient"], amount=data["amount"])
-        for signature in data.get("signatures", []):
-            tx.add_signature(signature)
-        return tx
-    if doc_type == "VotingResult":
-        vr = VotingResult(voting_id=data["voting_id"], results=data["results"])
-        for signature in data.get("signatures", []):
-            vr.add_signature(signature)
-        return vr
+    """Odtwarza dokument ze słownika jako GenericNotarialDocument.
+
+    Nie stosuje switch-case — wszystkie dane są zachowane w formacie JSON,
+    co pozwala na ich poprawne przetworzenie przez WorldState i inne moduły.
+    """
     return GenericNotarialDocument(data)
 
 

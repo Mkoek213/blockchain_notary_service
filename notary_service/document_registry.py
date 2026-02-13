@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from blockchain_core.notarial_document import NotarialDocument, Transaction, VotingResult
+from blockchain_core.notarial_document import NotarialDocument
 from business_logic.document_providers import (
     DocumentProvider,
     FinancialActionProvider,
@@ -10,7 +10,12 @@ from notary_service.block_codec import GenericNotarialDocument
 
 
 class DocumentRegistry:
-    """Router po dostawcach dokumentów (Factory Method)."""
+    """Router po dostawcach dokumentów (Factory Method).
+
+    Deleguje tworzenie dokumentów do zarejestrowanych providerów,
+    eliminując centralne struktury kontrolne typu switch-case
+    (zgodnie z zasadą Open/Closed).
+    """
 
     def __init__(self, providers: Optional[List[DocumentProvider]] = None) -> None:
         if providers is None:
@@ -18,10 +23,15 @@ class DocumentRegistry:
         self.providers = providers
 
     def create_document(self, document_data: Dict[str, Any]) -> NotarialDocument:
-        # Preserve extra fields like document_id by using generic document.
-        if document_data.get("document_id") is not None:
-            return GenericNotarialDocument(document_data)
+        """Tworzy dokument używając zarejestrowanych providerów (Factory Method).
+
+        Kolejność:
+        1. Delegacja do Factory Method providerów
+        2. Fallback: GenericNotarialDocument (zachowuje pełne dane JSON)
+        """
         doc_type = document_data.get("type")
+
+        # --- Factory Method: delegacja do odpowiedniego providera ---
         if doc_type:
             for provider in self.providers:
                 try:
@@ -30,22 +40,5 @@ class DocumentRegistry:
                 except Exception:
                     continue
 
-        if doc_type == "Transaction":
-            tx_doc = Transaction(
-                sender=document_data["sender"],
-                recipient=document_data["recipient"],
-                amount=document_data["amount"],
-            )
-            for sig in document_data.get("signatures", []):
-                tx_doc.add_signature(sig)
-            return tx_doc
-        if doc_type == "VotingResult":
-            voting_doc = VotingResult(
-                voting_id=document_data["voting_id"],
-                results=document_data["results"],
-            )
-            for sig in document_data.get("signatures", []):
-                voting_doc.add_signature(sig)
-            return voting_doc
-
+        # --- Fallback: GenericNotarialDocument zachowuje wszystkie dane ---
         return GenericNotarialDocument(document_data)
