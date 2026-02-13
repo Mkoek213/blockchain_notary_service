@@ -15,12 +15,12 @@ services:
         "ui-1",
         "--p2p-port",
         "8545",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-2:8546"
       ]
     ports:
       - "8001:8000"
@@ -47,12 +47,12 @@ services:
         "ui-2",
         "--p2p-port",
         "8546",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545"
       ]
     ports:
       - "8002:8000"
@@ -79,12 +79,12 @@ services:
         "ui-3",
         "--p2p-port",
         "8547",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8003:8000"
@@ -111,12 +111,12 @@ services:
         "ui-4",
         "--p2p-port",
         "8548",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8004:8000"
@@ -143,12 +143,12 @@ services:
         "ui-5",
         "--p2p-port",
         "8549",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8005:8000"
@@ -175,12 +175,12 @@ services:
         "ui-6",
         "--p2p-port",
         "8550",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8006:8000"
@@ -207,12 +207,12 @@ services:
         "ui-7",
         "--p2p-port",
         "8551",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8007:8000"
@@ -239,12 +239,12 @@ services:
         "ui-8",
         "--p2p-port",
         "8552",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8008:8000"
@@ -271,12 +271,12 @@ services:
         "ui-9",
         "--p2p-port",
         "8553",
-        "--discovery-port",
-        "9999",
         "--target-peers",
         "5",
         "--max-peers",
-        "15"
+        "15",
+        "--seed-peers",
+        "ui-1:8545,ui-2:8546"
       ]
     ports:
       - "8009:8000"

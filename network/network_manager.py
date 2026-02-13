@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from blockchain_core.interfaces import IBlockchainInterface
 
-from .discovery import DiscoveryService
 from .message import NetworkMessage
 from .peer_manager import PeerManager
 from .synchronizer import BlockSynchronizer
@@ -26,18 +25,16 @@ class NetworkManager:
         chain: IBlockchainInterface,
         identity_manager: Optional["IdentityManager"],
         listen_port: int = 8545,
-        discovery_port: int = 9999,
         target_peers: int = 3,
         max_peers: int = 10,
-        advertise_ip: Optional[str] = None,
-        broadcast_addr: Optional[str] = None,
+        seed_peers: Optional[list[tuple[str, int]]] = None,
     ) -> None:
         if identity_manager is None:
             raise ValueError("identity_manager is required")
         self.chain = chain
         self.identity_manager = identity_manager
         self.listen_port = listen_port
-        self.discovery_port = discovery_port
+        self.seed_peers = seed_peers or []
         self._node_id = self._get_node_id(listen_port)
         self.peer_manager = PeerManager(
             chain,
@@ -49,41 +46,28 @@ class NetworkManager:
         )
         self.synchronizer = BlockSynchronizer(chain, self.peer_manager)
         self.peer_manager.set_synchronizer(self.synchronizer)
-        self.discovery = DiscoveryService(
-            self._node_id,
-            listen_port,
-            discovery_port,
-            active_peers_provider=self.peer_manager.get_peer_count,
-            max_peers=target_peers,
-            peer_filter=lambda ip, port: not self.peer_manager.is_known_address(ip, port),
-            advertise_ip=advertise_ip,
-            broadcast_addr=broadcast_addr,
-        )
         self._server_socket: Optional[socket.socket] = None
         self._server_thread = threading.Thread(target=self._server_loop, daemon=True)
-        self._discovery_thread = threading.Thread(target=self._discovery_loop, daemon=True)
         self._sync_thread = threading.Thread(target=self._sync_loop, daemon=True)
+        self._gossip_thread = threading.Thread(target=self._gossip_loop, daemon=True)
         self._stop_event = threading.Event()
 
     def start(self, port: int = 8545) -> None:
         self.listen_port = port
-        self.discovery.tcp_port = port
         self.peer_manager.local_port = port
         self._node_id = self._get_node_id(port)
-        self.discovery.node_id = self._node_id
         logger.info("network manager starting on port %s", port)
         if not self._server_thread.is_alive():
             self._server_thread.start()
-        self.discovery.start_listener()
-        self.discovery.broadcast_presence()
-        if not self._discovery_thread.is_alive():
-            self._discovery_thread.start()
         if not self._sync_thread.is_alive():
             self._sync_thread.start()
+        if not self._gossip_thread.is_alive():
+            self._gossip_thread.start()
+        for ip, seed_port in self.seed_peers:
+            self.peer_manager.connect_to(ip, seed_port)
 
     def stop(self) -> None:
         self._stop_event.set()
-        self.discovery.stop()
         if self._server_socket is not None:
             try:
                 self._server_socket.close()
@@ -112,14 +96,6 @@ class NetworkManager:
     def get_peer_count(self) -> int:
         return len(self.peer_manager.peers)
 
-    def _discovery_loop(self) -> None:
-        while not self._stop_event.is_set():
-            peers = self.discovery.get_new_peers()
-            for ip, port, node_id in peers:
-                self.peer_manager.add_candidate(ip, port, node_id)
-            self.peer_manager.maintain_connections()
-            time.sleep(1.0)
-
     def _server_loop(self) -> None:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -142,6 +118,15 @@ class NetworkManager:
             except Exception:
                 pass
             time.sleep(5.0)
+
+    def _gossip_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                logger.info("gossip tick")
+                self.peer_manager.gossip_peers()
+            except Exception:
+                pass
+            time.sleep(3.0)
 
     def _get_node_id(self, listen_port: int) -> str:
         cert = self.identity_manager.get_self_certificate()

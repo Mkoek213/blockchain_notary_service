@@ -45,6 +45,8 @@
       grid-template-columns: 1fr 1fr;
       gap: 16px;
       padding: 24px 32px 48px;
+      max-width: 1200px;
+      margin: 0 auto;
     }
     .panel {
       background: var(--panel);
@@ -90,6 +92,10 @@
       font-size: 12px;
       overflow: auto;
       max-height: 420px;
+    }
+    #block-view {
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     .status { margin-top: 8px; color: var(--muted); font-size: 12px; }
     .error-msg { color: var(--error); margin-top: 8px; font-size: 13px; }
@@ -252,6 +258,12 @@
       </div>
       <div class="status" id="block-status"></div>
       <pre id="block-view"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>Połączenia peerów</h2>
+      <div class="status" id="peers-status"></div>
+      <pre id="peers-view"></pre>
     </section>
   </main>
 
@@ -497,6 +509,23 @@
       updateResolutionTotals();
     }
 
+    async function refreshPeers() {
+      try {
+        const res = await fetch("/api/peers");
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById("peers-status").textContent = data.error;
+          document.getElementById("peers-view").textContent = "";
+          return;
+        }
+        const peers = Array.isArray(data.peers) ? data.peers : [];
+        document.getElementById("peers-status").textContent = `połączonych: ${peers.length}`;
+        document.getElementById("peers-view").textContent = JSON.stringify(peers, null, 2);
+      } catch (e) {
+        document.getElementById("peers-status").textContent = "błąd odczytu";
+      }
+    }
+
     async function refresh() {
       const res = await fetch("/api/state");
       const data = await res.json();
@@ -515,6 +544,7 @@
       cachedState = data.state;
       updateSelectors(data.state);
       renderShareholders();
+      refreshPeers();
       return data;
     }
 
@@ -675,6 +705,7 @@
     // START
     checkAuthStatus();
     // refresh() i loadBlock() będą wywołane wewnątrz checkAuthStatus jeśli zalogowany
+    setInterval(refreshPeers, 3000);
   </script>
 </body>
 </html>

@@ -33,11 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", type=str, default="data")
     parser.add_argument("--enable-network", action="store_true")
     parser.add_argument("--p2p-port", type=int, default=8545)
-    parser.add_argument("--discovery-port", type=int, default=9999)
     parser.add_argument("--target-peers", type=int, default=3)
     parser.add_argument("--max-peers", type=int, default=3)
-    parser.add_argument("--advertise-ip", type=str, default="")
-    parser.add_argument("--broadcast-addr", type=str, default="")
+    parser.add_argument("--seed-peers", type=str, default="")
     parser.add_argument("--node-name", type=str, default="ui-node")
     # Przywrócone argumenty dla kompatybilności z Dockerem
     parser.add_argument("--key-path", type=str, default=None)
@@ -171,6 +169,25 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/chain":
             self._json(self._get_state_payload().get("chain", {}))
+            return
+        if self.path == "/api/peers":
+            if not self._check_auth():
+                self._json({"error": "Unauthorized"}, status=401)
+                return
+            network = getattr(self.server.service, "network_manager", None)  # type: ignore[attr-defined]
+            peer_list = []
+            if network is not None and network.peer_manager is not None:
+                for peer in list(network.peer_manager.peers.values()):
+                    endpoint = getattr(peer, "remote_endpoint", None)
+                    peer_list.append(
+                        {
+                            "peer_id": getattr(peer, "peer_id", ""),
+                            "endpoint": list(endpoint) if endpoint else None,
+                            "height": getattr(peer, "remote_height", 0),
+                            "latest_hash": getattr(peer, "remote_hash", ""),
+                        }
+                    )
+            self._json({"peers": peer_list})
             return
         if self.path.startswith("/api/block"):
             parsed = urlparse(self.path)
@@ -462,18 +479,29 @@ def main() -> None:
         except Exception as e:
             print(f"Ostrzeżenie: Nie udało się zalogować automatycznie: {e}")
 
+    seed_peers = []
+    if args.seed_peers:
+        for item in args.seed_peers.split(","):
+            entry = item.strip()
+            if not entry or ":" not in entry:
+                continue
+            host, port_text = entry.rsplit(":", 1)
+            try:
+                port_value = int(port_text)
+            except ValueError:
+                continue
+            seed_peers.append((host, port_value))
+
     service = NotaryService(
         use_storage=args.storage,
         data_dir=args.data_dir,
         enable_network=args.enable_network,
         identity_manager=identity_manager,
-        discovery_port=args.discovery_port,
         target_peers=args.target_peers,
         # Jeśli zalogowano automatycznie, wstrzyknij adapter
         crypto_service=SecurityModuleAdapter(identity_manager) if auto_login_success else None,
         max_peers=args.max_peers,
-        advertise_ip=args.advertise_ip or None,
-        broadcast_addr=args.broadcast_addr or None,
+        seed_peers=seed_peers,
     )
     
     if args.enable_network:

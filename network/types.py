@@ -7,6 +7,7 @@ class MessageType(Enum):
     BLOCK = "block"
     GET_BLOCKS = "get_blocks"
     BLOCKS_RESPONSE = "blocks_response"
+    PEER_LIST = "peer_list"
     PING = "ping"
     PONG = "pong"
 

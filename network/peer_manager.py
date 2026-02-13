@@ -4,7 +4,7 @@ import random
 import socket
 import threading
 import time
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from blockchain_core.interfaces import IBlockchainInterface
 
@@ -48,6 +48,7 @@ class PeerManager(IConnectionListener):
         self._disconnect_chance = 0.0
         self._seen_messages: Dict[str, float] = {}
         self._seen_ttl = 300.0
+        self._known_peers: Dict[Tuple[str, int], float] = {}
         self._stop_event = threading.Event()
         self._maintain_thread = threading.Thread(target=self._maintain_loop, daemon=True)
         self._maintain_thread.start()
@@ -80,7 +81,7 @@ class PeerManager(IConnectionListener):
             if not node_id:
                 node_id = f"{ip}:{port}"
             self._candidates[node_id] = (ip, port, 0.0)
-        logger.debug("candidate added %s:%s", ip, port)
+        logger.info("candidate added %s:%s (node_id=%s)", ip, port, node_id)
 
     def maintain_connections(self) -> None:
         with self._lock:
@@ -215,6 +216,10 @@ class PeerManager(IConnectionListener):
         if msg.type == MessageType.BLOCKS_RESPONSE:
             if self.synchronizer is not None:
                 self.synchronizer.handle_block_response(msg.payload)
+            return
+        if msg.type == MessageType.PEER_LIST:
+            self._handle_peer_list(msg.payload)
+            return
 
     def on_disconnect(self, sender: IPeerConnection) -> None:
         with self._lock:
@@ -265,6 +270,8 @@ class PeerManager(IConnectionListener):
         print(f"[peer] connected {sender.peer_id} height={sender.remote_height}")
         logger.info("peer connected %s", sender.peer_id)
         self.maintain_connections()
+        self._remember_peer(sender)
+        self._send_peer_list(sender)
         if self.synchronizer is not None:
             if sender.remote_height > self.chain.get_height():
                 self.synchronizer.sync_blockchain()
@@ -280,9 +287,71 @@ class PeerManager(IConnectionListener):
             self.maintain_connections()
             time.sleep(1.0)
 
+    def gossip_peers(self) -> None:
+        with self._lock:
+            peers = list(self.peers.values())
+        if not peers:
+            return
+        payload = self._build_peer_list_payload(limit=50)
+        msg = NetworkMessage(type=MessageType.PEER_LIST, payload=payload)
+        logger.info("gossip peers: sending list to %s peers", len(peers))
+        for peer in peers:
+            peer.send(msg)
+
+    def _send_peer_list(self, peer: IPeerConnection) -> None:
+        payload = self._build_peer_list_payload(limit=50)
+        msg = NetworkMessage(type=MessageType.PEER_LIST, payload=payload)
+        logger.info("send peer list to %s", peer.peer_id)
+        peer.send(msg)
+
     def _message_id(self, msg: NetworkMessage) -> str:
         payload = json.dumps(msg.payload, sort_keys=True, ensure_ascii=True)
         return f"{msg.type.value}:{payload}"
+
+    def _build_peer_list_payload(self, limit: int = 50) -> Dict[str, Any]:
+        items: List[Dict[str, Any]] = []
+        with self._lock:
+            for peer in self.peers.values():
+                endpoint = getattr(peer, "remote_endpoint", None)
+                if endpoint is None:
+                    continue
+                items.append({
+                    "node_id": peer.peer_id,
+                    "ip": endpoint[0],
+                    "port": endpoint[1],
+                })
+        for (ip, port), _ in sorted(self._known_peers.items(), key=lambda x: x[1], reverse=True):
+            if len(items) >= limit:
+                break
+            items.append({"node_id": None, "ip": ip, "port": port})
+        return {"peers": items}
+
+    def _handle_peer_list(self, payload: Dict[str, Any]) -> None:
+        peers = payload.get("peers", [])
+        if not isinstance(peers, list):
+            return
+        logger.info("received peer list with %s entries", len(peers))
+        for entry in peers:
+            if not isinstance(entry, dict):
+                continue
+            ip = str(entry.get("ip", ""))
+            port = int(entry.get("port", 0))
+            node_id = entry.get("node_id")
+            if not ip or port <= 0:
+                continue
+            if ip in {"127.0.0.1", "localhost"} and port == self.local_port:
+                continue
+            self._remember_known_endpoint(ip, port)
+            self.add_candidate(ip, port, str(node_id) if node_id else None)
+
+    def _remember_peer(self, sender: IPeerConnection) -> None:
+        endpoint = getattr(sender, "remote_endpoint", None)
+        if endpoint is None:
+            return
+        self._remember_known_endpoint(endpoint[0], endpoint[1])
+
+    def _remember_known_endpoint(self, ip: str, port: int) -> None:
+        self._known_peers[(ip, port)] = time.monotonic()
 
     def _is_seen(self, message_id: str) -> bool:
         now = time.monotonic()
