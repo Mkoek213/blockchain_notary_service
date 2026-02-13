@@ -188,7 +188,7 @@
       <label>ID spółki</label>
       <select id="shares-company"></select>
       <label>Liczba udziałów</label>
-      <input id="shares-count" type="number" value="100" />
+      <input id="shares-count" type="number" value="100" min="0" />
       <button id="shares-btn">Ustaw</button>
       <div class="status" id="shares-status"></div>
     </section>
@@ -215,9 +215,9 @@
         <label>ID spółki</label>
         <select id="transfer-company"></select>
         <label>Liczba udziałów</label>
-        <input id="transfer-shares" type="number" value="10" />
+        <input id="transfer-shares" type="number" value="10" min="1" />
         <label>Cena za udział</label>
-        <input id="transfer-price" type="number" value="50" />
+        <input id="transfer-price" type="number" value="50" min="0" />
         <label>Document ID (opcjonalnie)</label>
         <input id="transfer-doc-id" placeholder="(auto)" />
       </div>

@@ -142,15 +142,25 @@ class SimpleWorldState:
         Aplikuje transfer udziałów do stanu świata.
 
         Odejmuje udziały od sprzedającego i dodaje do kupującego.
+        Zawiera guardy zapobiegające ujemnemu stanowi udziałów.
         """
         seller = data["seller"]
         buyer = data["buyer"]
         company_id = data["company_id"]
         shares_count = data["shares_count"]
 
+        # Guard: nie pozwól na ujemną lub zerową liczbę udziałów
+        if not isinstance(shares_count, int) or shares_count <= 0:
+            return
+
         # Odejmij od sprzedającego
         seller_key = (seller, company_id)
         current_seller_shares = self._shares.get(seller_key, 0)
+
+        # Guard: nie pozwól sprzedającemu wejść na minus
+        if current_seller_shares < shares_count:
+            return
+
         self._shares[seller_key] = current_seller_shares - shares_count
 
         # Dodaj do kupującego

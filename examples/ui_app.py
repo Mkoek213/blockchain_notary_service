@@ -314,12 +314,20 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
             if not account_id or not company_id or shares is None:
                 self._json({"error": "account_id, company_id, shares are required"}, status=400)
                 return
+            try:
+                shares_val = int(shares)
+            except (ValueError, TypeError):
+                self._json({"error": "Invalid shares value"}, status=400)
+                return
+            if shares_val < 0:
+                self._json({"error": "shares cannot be negative"}, status=400)
+                return
             doc_data = {
                 "type": "SharesAllocation",
                 "document_id": data.get("document_id") or str(uuid.uuid4()),
                 "account_id": account_id,
                 "company_id": company_id,
-                "shares": int(shares),
+                "shares": shares_val,
                 "signatures": [],
             }
             if not service.validate_document(doc_data):
@@ -362,6 +370,22 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
             if not all(k in data for k in required):
                 self._json({"error": "Missing fields"}, status=400)
                 return
+            # Walidacja wartości wejściowych
+            try:
+                shares_val = int(data["shares_count"])
+                price_val = float(data["price_per_share"])
+            except (ValueError, TypeError):
+                self._json({"error": "Invalid numeric values"}, status=400)
+                return
+            if shares_val <= 0:
+                self._json({"error": "shares_count must be positive"}, status=400)
+                return
+            if price_val < 0:
+                self._json({"error": "price_per_share cannot be negative"}, status=400)
+                return
+            if data["seller"] == data["buyer"]:
+                self._json({"error": "seller and buyer must be different"}, status=400)
+                return
             document_id = data.get("document_id") or str(uuid.uuid4())
             doc_data = {
                 "type": "SharesTransfer",
@@ -369,8 +393,8 @@ class NotaryUIHandler(BaseHTTPRequestHandler):
                 "seller": data["seller"],
                 "buyer": data["buyer"],
                 "company_id": data["company_id"],
-                "shares_count": int(data["shares_count"]),
-                "price_per_share": float(data["price_per_share"]),
+                "shares_count": shares_val,
+                "price_per_share": price_val,
                 "signatures": [],
             }
             is_valid = service.validate_document(doc_data)
